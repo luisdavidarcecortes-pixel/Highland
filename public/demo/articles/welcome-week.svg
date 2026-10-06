@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Welcome week</title>
+  <desc id="desc">Illustration of students celebrating welcome week</desc>
+  <rect width="1200" height="675" fill="#f7d98b"/>
+  <path d="M0 500c180-100 330 45 520-30 190-75 335-5 680-80v285H0z" fill="#78b9a0"/>
+  <path d="M0 0h1200v170c-180 35-315-60-520-10C470 210 270 120 0 185z" fill="#ef8354"/>
+  <circle cx="220" cy="325" r="78" fill="#f4a261"/>
+  <circle cx="220" cy="270" r="52" fill="#264653"/>
+  <circle cx="510" cy="350" r="78" fill="#e9c46a"/>
+  <circle cx="510" cy="295" r="52" fill="#4a2c2a"/>
+  <circle cx="800" cy="320" r="78" fill="#b5d8df"/>
+  <circle cx="800" cy="265" r="52" fill="#1d4b45"/>
+  <path d="M150 475h140m150 0h140m150 0h140" stroke="#264653" stroke-width="25" stroke-linecap="round"/>
+  <text x="70" y="105" fill="#fff" font-family="Arial,sans-serif" font-size="58" font-weight="700">WELCOME WEEK</text>
+  <text x="72" y="155" fill="#264653" font-family="Arial,sans-serif" font-size="30">Together we make things happen</text>
+</svg>

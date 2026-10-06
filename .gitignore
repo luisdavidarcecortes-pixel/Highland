@@ -1,0 +1,10 @@
+node_modules
+.next
+.freebuff/
+out
+.env
+.env*.local
+*.tsbuildinfo
+.DS_Store
+server.log
+*.log

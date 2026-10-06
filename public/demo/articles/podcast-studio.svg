@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">School podcast</title>
+  <desc id="desc">Illustration of a student podcast recording studio</desc>
+  <rect width="1200" height="675" fill="#27324a"/>
+  <circle cx="970" cy="120" r="250" fill="#7657a6" opacity=".65"/>
+  <circle cx="970" cy="120" r="150" fill="none" stroke="#f3b562" stroke-width="14" opacity=".75"/>
+  <circle cx="970" cy="120" r="70" fill="none" stroke="#f3b562" stroke-width="12"/>
+  <rect x="170" y="340" width="760" height="55" rx="25" fill="#f3b562"/>
+  <rect x="510" y="220" width="80" height="220" rx="38" fill="#edf2f4"/>
+  <circle cx="550" cy="205" r="85" fill="#edf2f4"/>
+  <rect x="300" y="250" width="70" height="190" rx="32" fill="#ef8354"/>
+  <circle cx="335" cy="230" r="65" fill="#ef8354"/>
+  <rect x="730" y="250" width="70" height="190" rx="32" fill="#78b9a0"/>
+  <circle cx="765" cy="230" r="65" fill="#78b9a0"/>
+  <text x="80" y="105" fill="#fff" font-family="Arial,sans-serif" font-size="58" font-weight="700">ON AIR</text>
+  <text x="82" y="160" fill="#f3b562" font-family="Arial,sans-serif" font-size="30">The Highlander podcast</text>
+</svg>

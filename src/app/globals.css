@@ -1,0 +1,393 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #eaf4f5;
+  --ink: #171e55;
+  --night: #171e55;
+  --surface: #1d2b5c;
+  --surface-raised: #203f67;
+  --palette-indigo: #2f39a9;
+  --palette-blue: #2e6fa0;
+  --palette-cyan: #49a4bb;
+  --palette-turquoise: #15d8b3;
+  --border: rgba(73, 164, 187, 0.2);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--night);
+  background-image:
+    radial-gradient(ellipse 52% 38% at 18% 12%, rgba(46, 111, 160, 0.19), transparent 76%),
+    radial-gradient(ellipse 44% 34% at 82% 24%, rgba(21, 216, 179, 0.07), transparent 76%),
+    radial-gradient(ellipse at 50% -18%, rgba(47, 57, 169, 0.22), transparent 48%),
+    linear-gradient(125deg, rgba(255, 255, 255, 0.012), transparent 42%, rgba(73, 164, 187, 0.012)),
+    radial-gradient(rgba(73, 164, 187, 0.025) 0.7px, transparent 0.7px);
+  background-size: 170% 170%, 170% 170%, auto, auto, 22px 22px;
+  background-position: 0% 0%, 100% 0%, center top, center, 0 0;
+  color: var(--paper);
+  font-family: var(--font-poppins), system-ui, sans-serif;
+}
+
+body .site-header [alt="The Highlander"] {
+  filter: brightness(0) invert(1);
+}
+
+body:has(.public-page) .site-header .bg-paper {
+  background-color: var(--surface);
+}
+
+body:has(.public-page) .site-header .text-brand,
+body:has(.public-page) .site-header [class*="hover:text-brand"]:hover {
+  color: var(--palette-turquoise);
+}
+
+body:has(.public-page) .site-header [class~="text-ink"],
+body:has(.public-page) .public-page [class~="text-ink"] {
+  color: var(--paper);
+}
+
+body:has(.public-page) .site-header [class*="text-ink/"],
+body:has(.public-page) .public-page [class*="text-ink/"] {
+  color: rgba(234, 244, 245, 0.72);
+}
+
+body:has(.public-page) .public-page .text-brand,
+body:has(.public-page) .public-page .text-accent {
+  color: var(--palette-turquoise);
+}
+
+body:has(.public-page) .public-page [class*="hover:text-brand"]:hover {
+  color: var(--palette-cyan);
+}
+
+body:has(.public-page) .public-page .bg-white {
+  background-color: var(--surface);
+}
+
+body:has(.public-page) .public-page .bg-paper {
+  background-color: var(--surface-raised);
+}
+
+body:has(.public-page) .public-page [class*="border-ink"] {
+  border-color: var(--border);
+}
+
+body:has(.public-page) .public-page .bg-brand {
+  background-color: var(--palette-turquoise);
+  color: var(--night);
+}
+
+body:has(.public-page) .public-page [class*="hover:bg-brand-dark"]:hover {
+  background-color: var(--palette-cyan);
+}
+
+body:has(.public-page) .public-page .public-card {
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 58%);
+  box-shadow: 0 16px 44px -28px rgba(0, 0, 0, 0.85);
+  transition:
+    transform 420ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    border-color 320ms ease,
+    box-shadow 420ms ease;
+}
+
+body:has(.public-page) .public-page a.public-card:hover,
+body:has(.public-page) .public-page article.public-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(73, 164, 187, 0.55);
+  box-shadow: 0 24px 54px -28px rgba(0, 0, 0, 0.95), 0 0 24px -18px rgba(46, 111, 160, 0.5);
+}
+
+body:has(.public-page) .public-page .public-card img {
+  transition: transform 700ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+body:has(.public-page) .public-page .public-card:hover img {
+  transform: scale(1.045);
+}
+
+body:has(.public-page) .site-footer {
+  background-color: rgba(23, 30, 85, 0.78);
+  border-top: 1px solid var(--border);
+}
+
+body:has(.public-page) .reveal {
+  transform: translateY(22px) scale(0.99);
+  transition:
+    opacity 760ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    transform 760ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+body:has(.public-page) .reveal.is-visible {
+  transform: translateY(0) scale(1);
+}
+
+body:has(.public-page) .public-page .prose {
+  --tw-prose-body: rgba(234, 244, 245, 0.82);
+  --tw-prose-headings: var(--paper);
+  --tw-prose-bold: var(--paper);
+  --tw-prose-links: var(--palette-cyan);
+  --tw-prose-bullets: var(--palette-cyan);
+  --tw-prose-counters: var(--palette-cyan);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--paper);
+  --tw-prose-quote-borders: var(--palette-blue);
+  --tw-prose-captions: rgba(234, 244, 245, 0.72);
+  --tw-prose-code: var(--paper);
+  --tw-prose-pre-bg: var(--night);
+}
+
+body .bg-white {
+  background-color: var(--surface);
+}
+
+body .bg-paper {
+  background-color: var(--surface-raised);
+}
+
+body .text-brand,
+body .text-accent {
+  color: var(--palette-turquoise);
+}
+
+body .text-brand-light {
+  color: var(--palette-cyan);
+}
+
+body .text-ink {
+  color: var(--paper);
+}
+
+body [class*="text-ink/"] {
+  color: rgba(234, 244, 245, 0.72);
+}
+
+body [class*="border-ink"] {
+  border-color: var(--border);
+}
+
+body input,
+body textarea,
+body select {
+  color: var(--paper);
+  background-color: var(--surface);
+  border-color: var(--border);
+}
+
+body input::placeholder,
+body textarea::placeholder {
+  color: rgba(234, 244, 245, 0.48);
+}
+
+body input:focus,
+body textarea:focus,
+body select:focus {
+  outline-color: var(--palette-cyan);
+}
+
+/* Deliberately no `filter` on the reveal: a filter on an ancestor becomes the
+   backdrop root for everything inside it, so any glass surface nested in a
+   revealed card would sample an empty backdrop instead of the page behind it
+   and render as a dull tinted panel. Opacity and transform carry the entrance
+   on their own and neither of them breaks the backdrop chain once they settle. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+  will-change: opacity, transform;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Discrete scrollbar inside the reader */
+.nice-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: rgba(51, 51, 51, 0.25);
+  border-radius: 999px;
+}
+.nice-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Masthead-style section title */
+.masthead {
+  font-family: var(--font-poppins), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Newspaper-style separator line */
+.rule-double {
+  border-top: 3px double var(--palette-blue);
+}
+
+/* Badge for drafts uses subtle shades from the site palette. */
+.draft-badge {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(46, 111, 160, 0.16),
+    rgba(46, 111, 160, 0.16) 10px,
+    rgba(47, 57, 169, 0.1) 10px,
+    rgba(47, 57, 169, 0.1) 20px
+  );
+}
+
+/* ---------- Liquid glass --------------------------------------------------
+   Three rungs, styled bottom-up, so a surface is never invisible and never
+   unreadable:
+     1. default          opaque tinted panel, no filters at all — this is the
+                         whole product for reduced-transparency users.
+     2. @supports        frosted glass in every engine with backdrop-filter.
+     3. Chromium only    real refraction, applied from JS. It cannot use
+                         @supports: Firefox parses `backdrop-filter: url(...)`
+                         as valid, passes the check, and then paints nothing.
+   Blur stays static and under 20px: animating the radius re-composites
+   everything behind the surface on every single frame. */
+:root {
+  --lg-tint: rgba(13, 27, 46, 0.44);
+  --lg-tint-solid: rgba(10, 21, 36, 0.9);
+  --lg-dark-tint: rgba(9, 19, 34, 0.74);
+  --lg-dark-solid: rgba(9, 19, 34, 0.94);
+  --lg-rim: rgba(255, 255, 255, 0.3);
+  --lg-rim-soft: rgba(255, 255, 255, 0.12);
+  --lg-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95);
+}
+
+.lg-glass {
+  background-color: var(--lg-tint-solid);
+  box-shadow:
+    inset 0 1px 0 var(--lg-rim-soft),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    var(--lg-shadow);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lg-glass {
+    background-color: var(--lg-tint);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    backdrop-filter: blur(14px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 var(--lg-rim),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+      var(--lg-shadow);
+  }
+}
+
+/* Reader chrome sits over the newspaper itself, whose pages are white. At the
+   standard tint the light labels drop to about 2.5:1, so this variant carries
+   a much heavier tint and keeps them above 4.5:1 no matter which page is
+   scrolled underneath. */
+.lg-glass-dark {
+  background-color: var(--lg-dark-solid);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .lg-glass-dark {
+    background-color: var(--lg-dark-tint);
+  }
+}
+
+/* The user explicitly asked for less transparency: drop the filters entirely.
+   Expressed as a negation so engines that do not implement the feature keep
+   their glass instead of silently falling back to the bare panel. */
+@media (prefers-reduced-transparency: reduce) {
+  .lg-glass {
+    background-color: var(--lg-tint-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .lg-glass-dark {
+    background-color: var(--lg-dark-solid);
+  }
+}
+
+/* ---------- Glass rectangles and fields ---------------------------------- */
+
+/* Cards on the public pages are also styled by the page shell further up, which
+   paints its own fill and shadow. Re-assert the glass at a specificity that
+   wins, so a glass card is never flattened into a plain panel over the video it
+   is supposed to refract. */
+body:has(.public-page) .public-page .lg-glass.public-card,
+body:has(.public-page) .public-page .lg-glass.public-card:hover {
+  background-image: none;
+  box-shadow:
+    inset 0 1px 0 var(--lg-rim),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
+    var(--lg-shadow);
+}
+
+/* Text fields are rectangles too, so they get the same treatment — but only the
+   frosted rung: at ~40px tall a refraction bezel has nothing to bend, and one
+   live filter per field would be all cost and no effect. */
+body input:not([type='file']),
+body textarea,
+body select {
+  background-color: var(--lg-tint-solid);
+  box-shadow: inset 0 1px 0 var(--lg-rim-soft);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body input:not([type='file']),
+  body textarea,
+  body select {
+    background-color: var(--lg-tint);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
+    backdrop-filter: blur(10px) saturate(160%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  body input:not([type='file']),
+  body textarea,
+  body select {
+    background-color: var(--lg-tint-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .lg-glass {
+    background-color: #0a1626;
+  }
+}
+
+/* Respect prefers-reduced-motion in the flipbook animation */
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none;
+  }
+
+  .stf__parent {
+    transition: none !important;
+  }
+
+  body:has(.public-page) .reveal,
+  body:has(.public-page) .public-page .public-card,
+  body:has(.public-page) .public-page .public-card:hover,
+  body:has(.public-page) .public-page .public-card img,
+  body:has(.public-page) .public-page .public-card:hover img {
+    transition: none;
+    transform: none;
+  }
+}
+
+/* Keep page-turn shadows beneath the moving sheet and above the static pages. */
+#fb-wrap .stf__outerShadow,
+#fb-wrap .stf__innerShadow,
+#fb-wrap .stf__hardShadow,
+#fb-wrap .stf__hardInnerShadow {
+  z-index: 6 !important;
+}
