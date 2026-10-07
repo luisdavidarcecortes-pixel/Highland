@@ -2,6 +2,8 @@
 
 import { getSupabaseBrowserClient } from './supabase-browser';
 
+const BUCKET = 'newspaper';
+
 function storageConfig(): { url: string; anonKey: string } | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -66,8 +68,11 @@ export async function uploadObject(
   }
   const { url, anonKey } = config;
   const token = await accessToken(anonKey);
+  // Storage routes on /object/<bucket>/<path>: without the bucket segment the
+  // first path part is read as the bucket name and Storage answers
+  // "Bucket not found".
   const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-  const objectUrl = `${url}/storage/v1/object/${encodedPath}`;
+  const objectUrl = `${url}/storage/v1/object/${BUCKET}/${encodedPath}`;
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -108,7 +113,7 @@ export async function removeObjects(paths: string[]): Promise<void> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
   try {
-    await supabase.storage.from('newspaper').remove(paths);
+    await supabase.storage.from(BUCKET).remove(paths);
   } catch {
     /* Nothing sensible to do: the object will be cleaned up by hand later. */
   }

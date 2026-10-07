@@ -4,10 +4,10 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Trash2, Eye, EyeOff, FileText, Wand2, Pencil, X } from 'lucide-react';
 import type { Edition } from '@/lib/types';
-import { formatMonthEs } from '@/lib/utils';
+import { formatMonthEs, issueLabel, slugify } from '@/lib/utils';
 import { isDemoMode } from '@/lib/demo';
 import { analyzePdf } from '@/lib/analyze-pdf';
-import { issueLabel } from '@/lib/utils';
+import { removeObjects, uploadObject } from '@/lib/storage-upload';
 
 type EditionField = 'number' | 'title' | 'description' | 'edition_date' | 'school_year';
 
@@ -220,46 +220,56 @@ export function EditionsManager({
     setBusy(true);
     setProgress(0);
     try {
-      const body = new FormData();
-      if (file) body.set('pdf', file);
-      if (cover) body.set('cover', cover);
-      if (editingEdition) body.set('id', editingEdition.id);
-      body.set('number', form.number || '0');
-      body.set('title', form.title);
-      body.set('description', form.description);
-      body.set('edition_date', form.edition_date);
-      body.set('school_year', form.school_year || currentYear);
+      const stamp = Date.now();
+      const slug = slugify(form.title) || 'issue';
+      let pdfPath: string | null = null;
+      let coverPath: string | null = null;
 
-      // XHR instead of fetch: reports upload progress and can time out.
-      // With a large PDF (40+ MB) a plain fetch sat silent for minutes and
-      // the button looked frozen; now it shows % and always recovers.
-      const json = await new Promise<Record<string, unknown>>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open(editingEdition ? 'PATCH' : 'POST', '/api/editions');
-        xhr.responseType = 'text';
-        // 5 min hard cap: enough for big PDFs, short enough to always recover.
-        xhr.timeout = 5 * 60 * 1000;
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 100));
-        };
-        xhr.onload = () => {
-          let data: Record<string, unknown> = {};
-          try {
-            data = JSON.parse(xhr.responseText) as Record<string, unknown>;
-          } catch {
-            // Non-JSON error page (e.g. proxy 413): fall through to the status check.
-          }
-          if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-          else reject(new Error((data.error as string) ?? `Upload failed (HTTP ${xhr.status})`));
-        };
-        xhr.onerror = () =>
-          reject(new Error('Network error while uploading. Check your connection and try again.'));
-        xhr.ontimeout = () =>
-          reject(new Error('The upload took too long and was cancelled. Try again, or use a smaller PDF.'));
-        xhr.send(body);
+      if (file && cover) {
+        // The files go straight to Storage instead of through /api/editions:
+        // a serverless host cuts any request body at 4.5 MB and this PDF is
+        // ~44 MB, so posting it through the API would be a 413 in production
+        // while working perfectly in dev. Only the small paths travel through
+        // the API afterwards.
+        //
+        // The cover goes first — a few hundred KB, so if the big PDF then
+        // fails, the orphan left in the 1 GB free quota is negligible. Both
+        // paths carry this attempt's stamp, which is what the server checks
+        // before it lets the row point at them.
+        coverPath = `covers/${stamp}-${slug}.jpg`;
+        await uploadObject(coverPath, cover, 'image/jpeg', (fraction) =>
+          setProgress(Math.round(fraction * 5)),
+        );
+        pdfPath = `editions/${stamp}-${slug}.pdf`;
+        try {
+          await uploadObject(pdfPath, file, 'application/pdf', (fraction) =>
+            setProgress(5 + Math.round(fraction * 95)),
+          );
+        } catch (uploadErr) {
+          await removeObjects([coverPath]);
+          throw uploadErr;
+        }
+      }
+
+      const res = await fetch('/api/editions', {
+        method: editingEdition ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...(editingEdition ? { id: editingEdition.id } : {}),
+          number: form.number || '0',
+          title: form.title,
+          description: form.description,
+          edition_date: form.edition_date,
+          school_year: form.school_year || currentYear,
+          ...(pdfPath && coverPath ? { pdf_path: pdfPath, cover_path: coverPath } : {}),
+        }),
       });
-
-      if (json.error) throw new Error(String(json.error));
+      const json = (await res.json().catch(() => ({}))) as { error?: string; warning?: string };
+      if (!res.ok) {
+        // The row was never created, so these objects belong to nobody.
+        if (pdfPath && coverPath) await removeObjects([pdfPath, coverPath]);
+        throw new Error(json.error ?? `Upload failed (HTTP ${res.status})`);
+      }
       setMsg(
         typeof json.warning === 'string'
           ? json.warning
