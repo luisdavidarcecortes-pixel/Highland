@@ -94,6 +94,18 @@ as $$
   );
 $$;
 
+-- The caller's own role. Needed to pin `role` on self-updates: a row can be
+-- yours while a column of it is not. `current_role` would collide with the
+-- reserved SQL keyword of the same name, hence my_role().
+create or replace function public.my_role()
+returns text
+language sql
+security definer set search_path = public
+stable
+as $$
+  select role from public.profiles where id = auth.uid();
+$$;
+
 -- 6) Row Level Security (RLS)
 alter table public.profiles enable row level security;
 alter table public.editions enable row level security;
@@ -104,14 +116,27 @@ drop policy if exists "team readable" on public.profiles;
 create policy "team readable" on public.profiles
   for select to authenticated using (true);
 
+-- NOTE: an UPDATE policy that omits `with check` reuses `using` for the new
+-- row, so `id = auth.uid()` alone would let an editor write any value into
+-- their own row — including role = 'admin'. That was a real escalation: the
+-- anon key is public and an invited editor holds a valid session. Filtering
+-- rows is not protecting columns. Hence the split below.
 drop policy if exists "self insert" on public.profiles;
 create policy "self insert" on public.profiles
-  for insert to authenticated with check (id = auth.uid());
+  for insert to authenticated
+  with check (id = auth.uid() and role = 'editor');
 
 drop policy if exists "admin manages team" on public.profiles;
 create policy "admin manages team" on public.profiles
   for update to authenticated
-  using (public.is_admin() or id = auth.uid());
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "self updates own profile" on public.profiles;
+create policy "self updates own profile" on public.profiles
+  for update to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid() and role = public.my_role());
 
 drop policy if exists "admin deletes team" on public.profiles;
 create policy "admin deletes team" on public.profiles
