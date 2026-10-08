@@ -108,11 +108,17 @@ export function EditionsManager({
       }));
     }
     setAnalyzing(true);
-    setMsg('Reading the PDF and extracting its first-page cover…');
+    setMsg('Checking printed page numbers and preparing the first-page cover…');
     try {
-      const a = await analyzePdf(f);
+      const a = await analyzePdf(f, (message) => {
+        if (runId === analysisRunRef.current) setMsg(message);
+      });
       if (runId !== analysisRunRef.current) return;
+      setFile(a.file);
       setCover(a.cover);
+      const orderStatus = a.pageOrderChanged
+        ? `Reordered ${a.pageCount} pages by their printed numbers.`
+        : `Verified the printed-number order of all ${a.pageCount} pages.`;
       setForm((prev) => ({
         ...prev,
         number:
@@ -134,12 +140,12 @@ export function EditionsManager({
 
       if (a.text.length < 20) {
         setMsg(
-          'The cover was generated, but this PDF has too little selectable text for Gemini. Fill in the metadata manually.'
+          `${orderStatus} The cover is ready, but the first pages have too little selectable text for Gemini. Fill in the metadata manually.`
         );
         return;
       }
 
-      setMsg('PDF read. Asking Gemini to suggest the issue metadata…');
+      setMsg(`${orderStatus} Asking Gemini to suggest the issue metadata…`);
       try {
         const response = await fetch('/api/analyze-edition', {
           method: 'POST',
@@ -181,22 +187,26 @@ export function EditionsManager({
         }));
         setMsg(
           result.description
-            ? 'Gemini analyzed the PDF and suggested a description. Review the fields before saving.'
-            : 'Gemini analyzed the PDF, but could not find enough information to suggest a description. You can write one manually.'
+            ? `${orderStatus} Gemini suggested a description. Review the fields before saving.`
+            : `${orderStatus} Gemini could not suggest a description. You can write one manually.`
         );
       } catch (err) {
         if (runId !== analysisRunRef.current) return;
         setMsg(
-          `The PDF and cover are ready, but Gemini could not analyze the metadata: ${
+          `${orderStatus} The PDF and cover are ready, but Gemini could not analyze the metadata: ${
             err instanceof Error ? err.message : 'Unexpected error'
           }`
         );
       }
-    } catch {
+    } catch (err) {
       setFile(null);
       setCover(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
-      setMsg('Could not read the PDF and generate its first-page cover. Please choose a valid PDF and try again.');
+      setMsg(
+        err instanceof Error
+          ? err.message
+          : 'Could not safely read and order the PDF. Please check the file and try again.'
+      );
     } finally {
       if (runId === analysisRunRef.current) setAnalyzing(false);
     }

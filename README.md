@@ -67,9 +67,9 @@ update public.profiles set role = 'admin' where email = 'teacher@school.edu';
 
 ## How to publish an issue (for editors)
 
-1. Design the newspaper in Canva/Word and download it as a **PDF**.
+1. Design the newspaper in Canva/Word and download it as a **PDF**. Add one clear printed page number near the bottom of every page; the upload form reads digital numbers locally and uses Gemini to check scanned footers, then stops if any page number is unclear, missing, or duplicated.
 2. Sign in at `/admin`.
-3. **Issues → New issue**: number, title, date and the PDF (cover image is optional).
+3. **Issues → New issue**: number, title, date and the PDF. After verifying the printed page numbers, the upload form saves the pages in numeric order and generates the cover from the first numbered page.
 4. Check it looks right in `/read` and click the eye 👁 to **publish** it.
 
 ## Roles

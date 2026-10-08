@@ -32,6 +32,10 @@ function validPath(path: string, pattern: RegExp): boolean {
   return age >= -PATH_MAX_SKEW_MS && age <= PATH_MAX_AGE_MS;
 }
 
+function hasJsonContentType(req: NextRequest): boolean {
+  return req.headers.get('content-type')?.toLowerCase().includes('application/json') ?? false;
+}
+
 async function requireUser() {
   const user = await getSessionUser();
   if (!user) return { error: NextResponse.json({ error: 'Not authenticated' }, { status: 401 }) };
@@ -69,6 +73,12 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
+  if (!hasJsonContentType(req)) {
+    return NextResponse.json(
+      { error: 'This editor page is out of date. Refresh the page, select the PDF again, and retry.' },
+      { status: 415 },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as {
     title?: unknown;
@@ -142,6 +152,12 @@ export async function PATCH(req: NextRequest) {
 
   const supabase = getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
+  if (!hasJsonContentType(req)) {
+    return NextResponse.json(
+      { error: 'This editor page is out of date. Refresh the page and retry.' },
+      { status: 415 },
+    );
+  }
 
   const body = (await req.json().catch(() => null)) as {
     id?: unknown;
