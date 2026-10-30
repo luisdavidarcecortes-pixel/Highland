@@ -25,14 +25,18 @@ export function Reveal({
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 
-    if (mediaQuery.matches) {
-      setVisible(true);
-      return;
-    }
+    // Reduced motion: leave the content visible from the server render.
+    if (mediaQuery.matches) return;
 
     const node = ref.current;
     if (!node) return;
 
+    // Content already on screen is left alone: hiding it first would either
+    // flash or delay the first paint, and an entrance animation is only
+    // meaningful for content the reader reaches by scrolling.
+    if (node.getBoundingClientRect().top < window.innerHeight * 0.92) return;
+
+    setVisible(false);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

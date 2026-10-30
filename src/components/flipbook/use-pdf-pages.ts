@@ -32,6 +32,13 @@ const pagesCache = new WeakMap<
 >();
 
 /**
+ * Resolution of the page images kept by the book. The first page used to be
+ * rendered at 1x while the rest used 1.4x, so the cover looked visibly softer
+ * than the following pages — every page is now rendered at the same scale.
+ */
+const PAGE_SCALE = 1.4;
+
+/**
  * A page that pdfjs cannot draw still has to occupy its slot: dropping it
  * shifted every following page and, when the last page failed, left `ready`
  * false forever (the reader spun on "Rendering pages…" with no way out).
@@ -91,7 +98,7 @@ export function usePdfPages(doc: PDFDocumentProxy | null): PdfPagesResult {
     const idle = () =>
       new Promise<void>((resolve) => {
         if ('requestIdleCallback' in window) {
-          window.requestIdleCallback(() => resolve(), { timeout: 100 });
+          window.requestIdleCallback(() => resolve(), { timeout: 50 });
         } else {
           globalThis.setTimeout(resolve, 0);
         }
@@ -112,8 +119,7 @@ export function usePdfPages(doc: PDFDocumentProxy | null): PdfPagesResult {
           }
         }
 
-        // First page fixes the book's aspect ratio at scale 1.
-        const r = await renderPdfPage(doc, i, { scale: i === 1 ? 1 : 1.4 });
+        const r = await renderPdfPage(doc, i, { scale: PAGE_SCALE });
         if (cancelled) return;
         if (r) {
           setPages((cur) => {

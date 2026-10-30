@@ -1,10 +1,17 @@
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
+import type { Metadata } from 'next';
 import { getPublishedEditions } from '@/lib/data-editions';
 import { Flipbook } from '@/components/flipbook/flipbook';
 import { formatMonthEs, issueLabel } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: 'Read the latest issue',
+  description: 'Open the latest issue of The Highlander in the page-by-page reader.',
+  alternates: { canonical: '/read' },
+};
 
 export default async function ReadIndexPage() {
   const editions = await getPublishedEditions();

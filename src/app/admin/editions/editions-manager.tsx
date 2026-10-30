@@ -349,8 +349,9 @@ export function EditionsManager({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-semibold mb-1">Number</label>
+            <label htmlFor="edition-number" className="block text-xs font-semibold mb-1">Number</label>
             <input
+              id="edition-number"
               type="number"
               min={1}
               value={form.number}
@@ -363,8 +364,9 @@ export function EditionsManager({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold mb-1">Date</label>
+            <label htmlFor="edition-date" className="block text-xs font-semibold mb-1">Date</label>
             <input
+              id="edition-date"
               type="date"
               value={form.edition_date}
               onChange={(e) => {
@@ -377,8 +379,9 @@ export function EditionsManager({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold mb-1">Title</label>
+          <label htmlFor="edition-title" className="block text-xs font-semibold mb-1">Title</label>
           <input
+            id="edition-title"
             required
             value={form.title}
             onChange={(e) => {
@@ -391,8 +394,9 @@ export function EditionsManager({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold mb-1">Description (optional)</label>
+          <label htmlFor="edition-description" className="block text-xs font-semibold mb-1">Description (optional)</label>
           <textarea
+            id="edition-description"
             value={form.description}
             onChange={(e) => {
               manuallyEditedRef.current.add('description');
@@ -404,8 +408,9 @@ export function EditionsManager({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold mb-1">School year</label>
+          <label htmlFor="edition-school-year" className="block text-xs font-semibold mb-1">School year</label>
           <input
+            id="edition-school-year"
             value={form.school_year}
             onChange={(e) => {
               manuallyEditedRef.current.add('school_year');
@@ -417,7 +422,7 @@ export function EditionsManager({
         </div>
 
         <div>
-          <label className="block text-xs font-semibold mb-1">
+          <label htmlFor="edition-pdf" className="block text-xs font-semibold mb-1">
             Newspaper PDF {editingEdition ? '(optional; leave empty to keep current file)' : '*'}{' '}
             {analyzing && (
               <span className="text-ink/50 font-normal inline-flex items-center gap-1">
@@ -427,6 +432,7 @@ export function EditionsManager({
           </label>
           <input
             ref={pdfInputRef}
+            id="edition-pdf"
             type="file"
             accept="application/pdf"
             required={!editingEdition}

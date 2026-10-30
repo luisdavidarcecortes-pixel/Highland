@@ -68,8 +68,9 @@ export function TeamManager({
       >
         <h2 className="masthead text-xl font-bold">Invite an editor</h2>
         <div>
-          <label className="block text-xs font-semibold mb-1">Email *</label>
+          <label htmlFor="team-email" className="block text-xs font-semibold mb-1">Email *</label>
           <input
+            id="team-email"
             type="email"
             required
             value={invite.email}
@@ -79,16 +80,18 @@ export function TeamManager({
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Name</label>
+          <label htmlFor="team-name" className="block text-xs font-semibold mb-1">Name</label>
           <input
+            id="team-name"
             value={invite.fullName}
             onChange={(e) => setInvite({ ...invite, fullName: e.target.value })}
             className="w-full rounded-lg border border-ink/20 px-3 py-2 text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Role</label>
+          <label htmlFor="team-role" className="block text-xs font-semibold mb-1">Role</label>
           <select
+            id="team-role"
             value={invite.role}
             onChange={(e) => setInvite({ ...invite, role: e.target.value as Role })}
             className="w-full rounded-lg border border-ink/20 px-3 py-2 text-sm"
@@ -97,7 +100,7 @@ export function TeamManager({
             <option value="admin">Admin (publishes and manages the team)</option>
           </select>
         </div>
-        {msg && <p className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
+        {msg && <p role="status" aria-live="polite" className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
         <button
           type="submit"
           disabled={busy}
@@ -132,6 +135,7 @@ export function TeamManager({
                 value={m.role}
                 onChange={(e) => changeRole(m.id, e.target.value as Role)}
                 disabled={m.id === currentUserId}
+                aria-label={`Role for ${m.full_name ?? m.email}`}
                 className="rounded-lg border border-ink/20 px-2 py-1.5 text-xs"
               >
                 <option value="editor">editor</option>
@@ -142,6 +146,7 @@ export function TeamManager({
                 disabled={m.id === currentUserId}
                 className="p-2 rounded-lg hover:bg-ink/10 text-ink disabled:opacity-30"
                 title="Remove"
+                aria-label={`Remove ${m.full_name ?? m.email} from the team`}
               >
                 <Trash2 size={18} />
               </button>

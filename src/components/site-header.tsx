@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 
 const LINKS = [
@@ -16,6 +16,20 @@ const LINKS = [
 export function SiteHeader() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // A route change should never leave the mobile menu hanging open.
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
 
   return (
     <header className="site-header relative z-10">
@@ -53,6 +67,7 @@ export function SiteHeader() {
               onClick={() => setOpen(!open)}
               aria-label={open ? 'Close menu' : 'Open menu'}
               aria-expanded={open}
+              aria-controls="mobile-navigation"
             >
               {open ? <X size={22} /> : <Menu size={22} />}
             </button>
@@ -77,7 +92,7 @@ export function SiteHeader() {
         </nav>
       </div>
       {open && (
-        <nav aria-label="Mobile navigation" className="border-t border-ink/10 bg-paper md:hidden">
+        <nav id="mobile-navigation" aria-label="Mobile navigation" className="border-t border-ink/10 bg-paper md:hidden">
           {LINKS.map((link) => (
             <Link
               key={link.href}

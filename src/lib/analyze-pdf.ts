@@ -1,7 +1,6 @@
 'use client';
 
-import * as pdfjsLib from 'pdfjs-dist';
-import type { PDFPageProxy } from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 
 export interface PdfAnalysis {
   file: File;
@@ -70,6 +69,9 @@ export async function analyzePdf(
   file: File,
   onProgress?: PdfAnalysisProgress
 ): Promise<PdfAnalysis> {
+  // Dynamic import: the editions panel is server-rendered too, and PDF.js
+  // warns (and adds weight to the server bundle) when evaluated in Node.
+  const pdfjsLib = await import('pdfjs-dist');
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
   const bytes = await file.arrayBuffer();
@@ -235,7 +237,7 @@ export async function analyzePdf(
 
 async function readScannedPageNumbers(
   pages: AnalyzedPage[],
-  doc: Awaited<ReturnType<typeof pdfjsLib.getDocument>['promise']>,
+  doc: PDFDocumentProxy,
   onProgress?: PdfAnalysisProgress
 ): Promise<Map<number, number | null>> {
   const results = new Map<number, number | null>();
@@ -257,6 +259,9 @@ async function readScannedPageNumbers(
     const response = await fetch('/api/detect-page-numbers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // The server bounds each Gemini call; this bounds the whole batch so a
+      // dropped connection cannot leave the form disabled forever.
+      signal: AbortSignal.timeout(180_000),
       body: JSON.stringify({ pages: footers }),
     });
     const result = (await response.json().catch(() => null)) as {

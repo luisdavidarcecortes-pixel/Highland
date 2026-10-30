@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { ArrowRight, BookOpen, CalendarDays, Newspaper } from 'lucide-react';
 import { getPublishedEditions } from '@/lib/data-editions';
 import { getPublishedArticles } from '@/lib/data-articles';
@@ -8,6 +9,10 @@ import { Reveal } from '@/components/reveal';
 import { formatMonthEs, issueLabel } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 
 export default async function HomePage() {
   const editions = await getPublishedEditions();

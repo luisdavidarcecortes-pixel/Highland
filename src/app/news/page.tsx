@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'News',
   description: 'School news between issues.',
+  alternates: { canonical: '/news' },
 };
 
 export default async function NewsPage() {

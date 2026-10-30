@@ -106,10 +106,13 @@ export async function POST(req: NextRequest) {
     .join('\n');
 
   try {
+    // A stalled socket must not freeze the upload form: Gemini can take a long
+    // time on a cold model, but it must fail visibly instead of hanging.
     const callGemini = (model: string) =>
       fetch(`${GEMINI_URL.replace('{model}', model)}?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
@@ -146,7 +149,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Gemini returned invalid metadata.' }, { status: 502 });
     }
     return NextResponse.json(metadata);
-  } catch {
-    return NextResponse.json({ error: 'Could not reach Gemini.' }, { status: 502 });
+  } catch (err) {
+    const timedOut =
+      err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    return NextResponse.json(
+      { error: timedOut ? 'Gemini took too long to answer. Try again in a moment.' : 'Could not reach Gemini.' },
+      { status: timedOut ? 504 : 502 },
+    );
   }
 }

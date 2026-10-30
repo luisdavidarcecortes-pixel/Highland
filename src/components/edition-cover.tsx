@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
+import type { PDFDocumentLoadingTask } from 'pdfjs-dist';
 
 let coverDatabase: Promise<IDBDatabase> | null = null;
 
@@ -83,7 +83,7 @@ export function EditionCover({
     if (coverUrl || !shouldLoad) return;
 
     let cancelled = false;
-    let documentTask: ReturnType<typeof pdfjsLib.getDocument> | null = null;
+    let documentTask: PDFDocumentLoadingTask | null = null;
 
     async function renderFirstPage() {
       try {
@@ -97,6 +97,11 @@ export function EditionCover({
           return;
         }
 
+        // Loaded on demand: this component is server-rendered first, and
+        // evaluating pdfjs in Node prints a warning and grows the server
+        // bundle for a library only the browser can use.
+        const pdfjsLib = await import('pdfjs-dist');
+        if (cancelled) return;
         pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
         documentTask = pdfjsLib.getDocument({
           url: pdfUrl,

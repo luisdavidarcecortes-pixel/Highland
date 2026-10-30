@@ -130,8 +130,9 @@ export function ArticlesManager({
       >
         <h2 className="masthead text-xl font-bold">New article</h2>
         <div>
-          <label className="block text-xs font-semibold mb-1">Title *</label>
+          <label htmlFor="article-title" className="block text-xs font-semibold mb-1">Title *</label>
           <input
+            id="article-title"
             required
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -139,16 +140,18 @@ export function ArticlesManager({
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Excerpt</label>
+          <label htmlFor="article-excerpt" className="block text-xs font-semibold mb-1">Excerpt</label>
           <input
+            id="article-excerpt"
             value={form.excerpt}
             onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
             className="w-full rounded-lg border border-ink/20 px-3 py-2 text-sm"
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Body *</label>
+          <label htmlFor="article-body" className="block text-xs font-semibold mb-1">Body *</label>
           <textarea
+            id="article-body"
             required
             rows={8}
             value={form.body}
@@ -157,7 +160,7 @@ export function ArticlesManager({
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Image</label>
+          <label htmlFor="article-image" className="block text-xs font-semibold mb-1">Image</label>
           <div className="flex items-start gap-3">
             {imagePreview ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -173,6 +176,7 @@ export function ArticlesManager({
             )}
             <div className="flex-1">
               <input
+                id="article-image"
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => handleImageChange(e.target.files?.[0] ?? null)}
@@ -193,8 +197,9 @@ export function ArticlesManager({
           </div>
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">…or paste an Image URL</label>
+          <label htmlFor="article-image-url" className="block text-xs font-semibold mb-1">…or paste an Image URL</label>
           <input
+            id="article-image-url"
             value={form.image_url}
             onChange={(e) => {
               setForm({ ...form, image_url: e.target.value });
@@ -206,8 +211,9 @@ export function ArticlesManager({
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Video URL (YouTube)</label>
+          <label htmlFor="article-video" className="block text-xs font-semibold mb-1">Video URL (YouTube)</label>
           <input
+            id="article-video"
             value={form.video_url}
             onChange={(e) => setForm({ ...form, video_url: e.target.value })}
             placeholder="https://youtube.com/watch?v=…"
@@ -215,8 +221,9 @@ export function ArticlesManager({
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold mb-1">Audio URL (podcast)</label>
+          <label htmlFor="article-audio" className="block text-xs font-semibold mb-1">Audio URL (podcast)</label>
           <input
+            id="article-audio"
             value={form.audio_url}
             onChange={(e) => setForm({ ...form, audio_url: e.target.value })}
             placeholder="https://…/episode.mp3"
@@ -231,7 +238,7 @@ export function ArticlesManager({
           <Upload size={16} />{' '}
           {uploadingImage ? 'Uploading photo…' : busy ? 'Publishing…' : 'Publish article'}
         </button>
-        {msg && <p className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
+        {msg && <p role="status" aria-live="polite" className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
       </form>
 
       <div>
@@ -252,10 +259,20 @@ export function ArticlesManager({
                   <p className="font-semibold text-sm truncate">{a.title}</p>
                   <p className="text-xs text-ink/60">{formatDateEs(a.created_at)}</p>
                 </div>
-                <button onClick={() => togglePublish(a)} className="p-2 rounded-lg hover:bg-ink/5" title="Publish/Unpublish">
+                <button
+                  onClick={() => togglePublish(a)}
+                  className="p-2 rounded-lg hover:bg-ink/5"
+                  title="Publish/Unpublish"
+                  aria-label={`${a.published ? 'Unpublish' : 'Publish'} ${a.title}`}
+                >
                   {a.published ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
-                <button onClick={() => remove(a)} className="p-2 rounded-lg hover:bg-ink/10 text-ink" title="Delete">
+                <button
+                  onClick={() => remove(a)}
+                  className="p-2 rounded-lg hover:bg-ink/10 text-ink"
+                  title="Delete"
+                  aria-label={`Delete ${a.title}`}
+                >
                   <Trash2 size={18} />
                 </button>
               </li>

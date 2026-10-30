@@ -131,6 +131,9 @@ export async function POST(req: NextRequest) {
     fetch(`${GEMINI_URL.replace('{model}', model)}?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // Bounds each batch: without it a stalled response left the upload form
+      // disabled indefinitely with no way forward but a reload.
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig: {
@@ -171,7 +174,16 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ pages: pageNumbers });
-  } catch {
-    return NextResponse.json({ error: 'Could not reach Gemini to read scanned page numbers.' }, { status: 502 });
+  } catch (err) {
+    const timedOut =
+      err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+    return NextResponse.json(
+      {
+        error: timedOut
+          ? 'Gemini took too long to read the scanned page numbers. Try again in a moment.'
+          : 'Could not reach Gemini to read scanned page numbers.',
+      },
+      { status: timedOut ? 504 : 502 },
+    );
   }
 }

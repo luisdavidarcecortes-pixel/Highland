@@ -58,6 +58,7 @@ export default function LoginPage() {
             id="email"
             type="email"
             required
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-3.5 py-2.5 bg-paper/50 text-ink focus:outline-none focus:ring-2 focus:ring-brand"
@@ -70,16 +71,22 @@ export default function LoginPage() {
             id="password"
             type="password"
             required
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-xl border border-ink/20 px-3.5 py-2.5 bg-paper/50 text-ink focus:outline-none focus:ring-2 focus:ring-brand"
             placeholder="••••••••"
           />
         </div>
-        {error && <p className="text-sm text-accent font-semibold">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-accent font-semibold">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={busy}
+          aria-busy={busy}
           className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand text-paper py-3 font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50 shadow-sm"
         >
           <LogIn size={18} /> {busy ? 'Signing in…' : 'Sign in'}

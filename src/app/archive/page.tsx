@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
   title: 'Archive',
   description: 'Every published issue of the school newspaper.',
+  alternates: { canonical: '/archive' },
 };
 
 export default async function ArchivePage() {

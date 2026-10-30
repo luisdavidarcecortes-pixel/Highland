@@ -30,6 +30,7 @@ import {
   panelInLeft,
 } from './motion-tokens';
 import { useRefraction } from '@/components/liquid-glass';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 
 interface ToolbarProps {
   page: number;
@@ -161,7 +162,13 @@ export function Toolbar(p: ToolbarProps) {
         <button className={`${btn} hidden sm:inline-flex`} onClick={p.onCopyLink} title="Copy link to this page" aria-label="Copy link to this page">
           {p.copied ? <Check size={18} className="text-emerald-400" /> : <Link2 size={18} />}
         </button>
-        <button className={`${btn} hidden sm:inline-flex`} onClick={p.onToggleSound} title={p.sound ? 'Sound on' : 'Sound off'} aria-label="Page turn sound">
+        <button
+          className={`${btn} hidden sm:inline-flex`}
+          onClick={p.onToggleSound}
+          title={p.sound ? 'Sound on' : 'Sound off'}
+          aria-label="Page turn sound"
+          aria-pressed={p.sound}
+        >
           {p.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
         <button className={btn} onClick={p.onToggleThumbs} title="Thumbnails (G)" aria-label="Thumbnails">
@@ -172,6 +179,9 @@ export function Toolbar(p: ToolbarProps) {
         </button>
       </motion.div>
     </motion.div>
+    <span className="sr-only" role="status" aria-live="polite">
+      {p.copied ? 'Link to this page copied' : ''}
+    </span>
     </div>
   );
 }
@@ -295,12 +305,16 @@ export function SearchPanel({
   onClose: () => void;
   onGo: (page: number) => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useDialogFocus<HTMLDivElement>(true, onClose);
   useRefraction(rootRef, { radius: 12 });
 
   return (
     <motion.div
       ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Search in the newspaper"
+      tabIndex={-1}
       variants={panelIn}
       initial="hidden"
       animate="show"
@@ -311,6 +325,7 @@ export function SearchPanel({
         <Search size={16} className="text-ink/50 shrink-0" />
         <input
           autoFocus
+          aria-label="Search in the newspaper"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search in the newspaper…"
@@ -351,12 +366,16 @@ export function TocPanel({
   onClose: () => void;
   onGo: (page: number) => void;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useDialogFocus<HTMLDivElement>(true, onClose);
   useRefraction(rootRef, { radius: 12 });
 
   return (
     <motion.div
       ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Contents"
+      tabIndex={-1}
       variants={panelInLeft}
       initial="hidden"
       animate="show"
@@ -389,6 +408,64 @@ export function TocPanel({
           </li>
         ))}
       </ul>
+    </motion.div>
+  );
+}
+
+/**
+ * Full-page thumbnail grid. It covers the reader, so it behaves like a modal:
+ * focus is trapped inside and Escape closes it.
+ */
+export function ThumbsPanel({
+  pages,
+  page,
+  onClose,
+  onGo,
+}: {
+  pages: string[];
+  page: number;
+  onClose: () => void;
+  onGo: (page: number) => void;
+}) {
+  const rootRef = useDialogFocus<HTMLDivElement>(true, onClose);
+
+  return (
+    <motion.div
+      ref={rootRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Page thumbnails"
+      tabIndex={-1}
+      initial={{ opacity: 0, y: 40 }}
+      animate={{ opacity: 1, y: 0, transition: springSoft }}
+      exit={{ opacity: 0, y: 40, transition: { duration: 0.22, ease: 'easeIn' } }}
+      className="absolute inset-0 z-20 bg-[#ffffff] pt-14 pb-4 px-4 overflow-auto nice-scroll"
+    >
+      <ThumbsCloseButton onClick={onClose} />
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 max-w-4xl mx-auto">
+        {pages.map((src, i) => (
+          <button
+            key={i}
+            type="button"
+            onClick={() => onGo(i + 1)}
+            aria-label={`Go to page ${i + 1}`}
+            aria-current={page === i + 1 ? 'page' : undefined}
+            className="group rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={src}
+              alt=""
+              className={`w-full rounded shadow group-hover:ring-2 group-hover:ring-accent ${
+                page === i + 1 ? 'ring-2 ring-accent' : ''
+              }`}
+            />
+            <p aria-hidden className="text-ink/60 text-xs text-center mt-1">
+              {i + 1}
+            </p>
+          </button>
+        ))}
+      </div>
     </motion.div>
   );
 }

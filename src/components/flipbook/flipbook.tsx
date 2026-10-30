@@ -13,13 +13,14 @@ import { useAutoFlip } from './use-auto-flip';
 import { renderPdfPage } from './pdf-render';
 import {
   Toolbar,
-  ThumbsCloseButton,
+  ThumbsPanel,
   SearchPanel,
   TocPanel,
   Filmstrip,
 } from './toolbar';
 import { X, ZoomIn, ZoomOut } from 'lucide-react';
 import { SlowVideo } from '@/components/slow-video';
+import { useDialogFocus } from '@/lib/use-dialog-focus';
 
 interface FlipbookProps {
   pdfUrl: string;
@@ -31,7 +32,7 @@ interface FlipbookProps {
 const LAST_PAGE_KEY = (id: string) => `highlander:lastpage:${id}`;
 
 export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
-  const { doc, loading, error: loadError, progress } = usePdfDoc(pdfUrl);
+  const { doc, loading, error: loadError, progress, retry } = usePdfDoc(pdfUrl);
   const { pages, texts, aspect, error: renderError, ready } = usePdfPages(doc);
   const bookRef = useRef<{ pageFlip: () => PageFlip | undefined } | null>(null);
   const { w, h } = useElementSize('fb-wrap');
@@ -98,7 +99,10 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         saved = NaN;
       }
     }
-    const target = fromUrl > 1 ? fromUrl : !Number.isNaN(saved) && saved >= 1 ? saved : 1;
+    const target = Math.min(
+      Math.max(1, fromUrl > 1 ? fromUrl : !Number.isNaN(saved) && saved >= 1 ? saved : 1),
+      pages.length || 1
+    );
     if (target > 1) {
       initialPageRef.current = target;
       setPage(target);
@@ -242,6 +246,9 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     setZoomScale(1);
     setZoomPan({ x: 0, y: 0 });
   }, []);
+  // The zoom overlay is modal: trap Tab inside it, close on Escape and give
+  // focus back to the book when it closes.
+  const zoomDialogRef = useDialogFocus<HTMLDivElement>(!!zoomPage, closeZoom);
 
   // ---- Page size -------------------------------------------------------------
   const getPageWidth = () => {
@@ -378,6 +385,11 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         return;
       }
 
+      // Search, contents and thumbnails are modal dialogs: they own the
+      // keyboard while open. Without this guard, an arrow key pressed on a
+      // result button flipped the book behind the panel.
+      if (searchOpen || tocOpen || thumbs) return;
+
       const el = ev.target as HTMLElement | null;
       const isTyping =
         !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
@@ -480,6 +492,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       id="fb-wrap"
       role="region"
       aria-label={`${title} — issue reader`}
+      aria-busy={!ready && !error}
       className="relative w-full h-[80vh] min-h-[440px] rounded-2xl overflow-hidden select-none border border-ink/15 bg-transparent"
     >
       <SlowVideo src="/bg/595873_Drone_Landscape_Nature_1280x720.mp4" />
@@ -541,7 +554,21 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           strip && pages.length > 2 ? 'pb-24' : 'pb-3'
         }`}
       >
-        {error && <p className="text-ink/70">{error}</p>}
+        {error && (
+          <div
+            role="alert"
+            className="w-80 max-w-full rounded-2xl border border-ink/15 bg-white px-6 py-5 text-center"
+          >
+            <p className="text-ink/80 text-sm">{error}</p>
+            <button
+              type="button"
+              onClick={retry}
+              className="mt-3 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-paper hover:bg-brand-dark transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              Try again
+            </button>
+          </div>
+        )}
         {!error && !ready && (
           <div className="text-center w-72 rounded-2xl border border-ink/15 bg-white px-6 py-5">
             <p className="text-ink/70 animate-pulse mb-2">
@@ -624,27 +651,13 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
 
       <AnimatePresence>
         {thumbs && pages.length > 0 && (
-        <motion.div
-          key="thumbs"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0, transition: springSoft }}
-          exit={{ opacity: 0, y: 40, transition: { duration: 0.22, ease: 'easeIn' } }}
-          className="absolute inset-0 z-20 bg-[#ffffff] pt-14 pb-4 px-4 overflow-auto nice-scroll"
-        >
-          <ThumbsCloseButton onClick={() => setThumbs(false)} />
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 max-w-4xl mx-auto">
-            {pages.map((src, i) => (
-              <button key={i} onClick={() => goTo(i + 1)} className="group">
-                <img
-                  src={src}
-                  alt={`Thumbnail ${i + 1}`}
-                  className="w-full rounded shadow group-hover:ring-2 group-hover:ring-accent"
-                />
-                <p className="text-ink/60 text-xs text-center mt-1">{i + 1}</p>
-              </button>
-            ))}
-          </div>
-        </motion.div>
+          <ThumbsPanel
+            key="thumbs"
+            pages={pages}
+            page={page}
+            onClose={() => setThumbs(false)}
+            onGo={goTo}
+          />
         )}
       </AnimatePresence>
 
@@ -660,6 +673,8 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         {zoomPage && (
         <motion.div
           key="zoom"
+          ref={zoomDialogRef}
+          tabIndex={-1}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { duration: 0.22 } }}
           exit={{ opacity: 0, transition: { duration: 0.18 } }}

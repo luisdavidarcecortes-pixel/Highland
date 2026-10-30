@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getArticleBySlug, getPublishedArticles } from '@/lib/data-articles';
 import { toYouTubeEmbed, isAudioUrl, formatDateEs } from '@/lib/utils';
+import { absoluteUrl } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,24 +14,62 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const article = await getArticleBySlug(params.slug);
-  if (!article) return { title: 'Article not found' };
+  if (!article || !article.published) {
+    return { title: 'Article not found', robots: { index: false, follow: false } };
+  }
+  const description =
+    article.excerpt?.trim() || article.body.replace(/\s+/g, ' ').trim().slice(0, 155);
+  const image = article.image_url ? absoluteUrl(article.image_url) : undefined;
   return {
     title: article.title,
-    description: article.excerpt ?? undefined,
-    openGraph: { images: article.image_url ? [article.image_url] : undefined },
+    description,
+    alternates: { canonical: `/news/${article.slug}` },
+    openGraph: {
+      type: 'article',
+      title: article.title,
+      description,
+      url: `/news/${article.slug}`,
+      publishedTime: article.created_at,
+      images: image ? [{ url: image, alt: article.title }] : undefined,
+    },
+    twitter: {
+      card: image ? 'summary_large_image' : 'summary',
+      title: article.title,
+      description,
+      images: image ? [image] : undefined,
+    },
   };
 }
 
 export default async function ArticlePage({ params }: Props) {
   const article = await getArticleBySlug(params.slug);
-  if (!article) notFound();
+  // Drafts are unreachable from the public site even if the database policy
+  // ever regresses and returns them: the page itself is the last guard.
+  if (!article || !article.published) notFound();
 
   const others = (await getPublishedArticles()).filter((a) => a.slug !== article.slug).slice(0, 3);
   const embed = article.video_url ? toYouTubeEmbed(article.video_url) : null;
   const audio = article.audio_url && isAudioUrl(article.audio_url) ? article.audio_url : null;
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'NewsArticle',
+    headline: article.title,
+    description: article.excerpt ?? undefined,
+    datePublished: article.created_at,
+    image: article.image_url ? absoluteUrl(article.image_url) : undefined,
+    mainEntityOfPage: absoluteUrl(`/news/${article.slug}`),
+    publisher: {
+      '@type': 'Organization',
+      name: 'The Highlander · Highland Academy',
+    },
+  };
 
   return (
     <article className="public-page mx-auto max-w-3xl px-4 py-10 md:py-14">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+      />
       <Link href="/news" className="text-sm font-semibold text-ink/60 hover:text-ink">
         ← All news
       </Link>
