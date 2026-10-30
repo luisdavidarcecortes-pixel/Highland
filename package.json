@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "supabase:check": "node scripts/check-supabase.mjs",
     "gen:demo": "node scripts/generate-demo-assets.mjs",
     "postinstall": "node scripts/copy-pdf-worker.mjs"
   },
