@@ -2,14 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { isDemoMode } from '@/lib/demo';
 import { clientKey, rateLimit } from '@/lib/rate-limit';
-import { GEMINI_URL, GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL } from '@/lib/gemini';
+import { generateGeminiJson, GeminiError } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
-
-interface GeminiResponse {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
-  error?: { message?: string };
-}
 
 interface EditionMetadata {
   title: string | null;
@@ -106,55 +101,25 @@ export async function POST(req: NextRequest) {
     .join('\n');
 
   try {
-    // A stalled socket must not freeze the upload form: Gemini can take a long
-    // time on a cold model, but it must fail visibly instead of hanging.
-    const callGemini = (model: string) =>
-      fetch(`${GEMINI_URL.replace('{model}', model)}?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(45_000),
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 300,
-            responseMimeType: 'application/json',
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
-      });
-
-    let res = await callGemini(GEMINI_PRIMARY_MODEL);
-    if (res.status === 503 || res.status === 429) {
-      // Transient demand spikes on the free tier: one retry after a short pause.
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      res = await callGemini(GEMINI_PRIMARY_MODEL);
-    }
-    if (res.status === 503 || res.status === 429) {
-      res = await callGemini(GEMINI_FALLBACK_MODEL);
-    }
-    const json = (await res.json()) as GeminiResponse;
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: json.error?.message ?? `Gemini error ${res.status}` },
-        { status: 502 }
-      );
-    }
-    const responseText = json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!responseText) {
-      return NextResponse.json({ error: 'Gemini returned no metadata.' }, { status: 502 });
-    }
+    const responseText = await generateGeminiJson({
+      apiKey,
+      parts: [{ text: prompt }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 300,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
     const metadata = parseMetadata(responseText);
     if (!metadata) {
       return NextResponse.json({ error: 'Gemini returned invalid metadata.' }, { status: 502 });
     }
     return NextResponse.json(metadata);
-  } catch (err) {
-    const timedOut =
-      err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    return NextResponse.json(
-      { error: timedOut ? 'Gemini took too long to answer. Try again in a moment.' : 'Could not reach Gemini.' },
-      { status: timedOut ? 504 : 502 },
-    );
+  } catch (error) {
+    if (error instanceof GeminiError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    return NextResponse.json({ error: 'Could not reach Gemini.' }, { status: 502 });
   }
 }

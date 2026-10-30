@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { isDemoMode } from '@/lib/demo';
 import { clientKey, rateLimit } from '@/lib/rate-limit';
-import { GEMINI_URL, GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL } from '@/lib/gemini';
+import { generateGeminiJson, GeminiError } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
@@ -12,11 +12,6 @@ const MAX_IMAGE_LENGTH = 300_000;
 interface FooterImage {
   pdfPage: number;
   image: string;
-}
-
-interface GeminiResponse {
-  candidates?: { content?: { parts?: { text?: string }[] } }[];
-  error?: { message?: string };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -127,46 +122,22 @@ export async function POST(req: NextRequest) {
     parts.push({ inline_data: { mime_type: 'image/jpeg', data: footer.image } });
   }
 
-  const callGemini = (model: string) =>
-    fetch(`${GEMINI_URL.replace('{model}', model)}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // Bounds each batch: without it a stalled response left the upload form
-      // disabled indefinitely with no way forward but a reload.
-      signal: AbortSignal.timeout(45_000),
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 300,
-          responseMimeType: 'application/json',
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
+  try {
+    const text = await generateGeminiJson({
+      apiKey,
+      parts,
+      generationConfig: {
+        temperature: 0,
+        maxOutputTokens: 300,
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
-  try {
-    let response = await callGemini(GEMINI_PRIMARY_MODEL);
-    if (response.status === 429 || response.status === 503) {
-      await new Promise((resolve) => setTimeout(resolve, 900));
-      response = await callGemini(GEMINI_PRIMARY_MODEL);
-    }
-    if (response.status === 429 || response.status === 503) {
-      response = await callGemini(GEMINI_FALLBACK_MODEL);
-    }
-
-    const result = (await response.json()) as GeminiResponse;
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: result.error?.message ?? `Gemini error ${response.status}` },
-        { status: 502 }
-      );
-    }
-
-    const text = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    const pageNumbers = text
-      ? parsePageNumbers(text, new Set(footerImages.map((footer) => footer.pdfPage)))
-      : null;
+    const pageNumbers = parsePageNumbers(
+      text,
+      new Set(footerImages.map((footer) => footer.pdfPage))
+    );
     if (!pageNumbers) {
       return NextResponse.json(
         { error: 'Gemini could not confidently read all scanned page numbers.' },
@@ -174,16 +145,13 @@ export async function POST(req: NextRequest) {
       );
     }
     return NextResponse.json({ pages: pageNumbers });
-  } catch (err) {
-    const timedOut =
-      err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
+  } catch (error) {
+    if (error instanceof GeminiError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json(
-      {
-        error: timedOut
-          ? 'Gemini took too long to read the scanned page numbers. Try again in a moment.'
-          : 'Could not reach Gemini to read scanned page numbers.',
-      },
-      { status: timedOut ? 504 : 502 },
+      { error: 'Could not reach Gemini to read scanned page numbers.' },
+      { status: 502 }
     );
   }
 }

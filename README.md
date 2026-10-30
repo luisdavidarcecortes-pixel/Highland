@@ -35,6 +35,9 @@ flipbook reader working.
    - `service_role` → `SUPABASE_SERVICE_ROLE_KEY` (⚠️ secret, server only)
 3. In Supabase: **Authentication → URL Configuration**, set your website URL
    (locally: `http://localhost:3000`) as the *Site URL*.
+4. Optional, for AI metadata and scanned-footer OCR: add `GEMINI_API_KEY` from
+   https://aistudio.google.com/apikey. The panel falls back to the local PDF
+   heuristics when it is missing.
 
 ### 3. Create your admin account
 
