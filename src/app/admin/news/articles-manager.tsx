@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, Trash2, Eye, EyeOff, PenLine, ImagePlus, Loader2 } from 'lucide-react';
 import type { Article } from '@/lib/types';
@@ -22,35 +22,63 @@ export function ArticlesManager({
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  // Every pick gets an id: a slow upload that finishes after the user chose
+  // another photo must not overwrite the newer URL or the newer preview.
+  const uploadIdRef = useRef(0);
+  const previewUrlRef = useRef<string | null>(null);
+
+  function clearPreview() {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }
 
   /** Upload the chosen photo to Storage right away and keep its URL in the form. */
   async function handleImageChange(f: File | null) {
+    const uploadId = ++uploadIdRef.current;
     setImageFile(f);
-    setImagePreview(f ? URL.createObjectURL(f) : null);
+    clearPreview();
+    const preview = f ? URL.createObjectURL(f) : null;
+    previewUrlRef.current = preview;
+    setImagePreview(preview);
+
     if (!f) {
+      setUploadingImage(false);
       setForm((p) => ({ ...p, image_url: '' }));
       return;
     }
+    // The previous photo's URL is invalid from this moment: publishing before
+    // the new upload finishes must not silently attach the old image.
+    setForm((p) => ({ ...p, image_url: '' }));
     setUploadingImage(true);
     try {
       const body = new FormData();
       body.set('image', f);
       const res = await fetch('/api/upload-image', { method: 'POST', body });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? 'Upload failed');
-      setForm((p) => ({ ...p, image_url: json.url }));
+      const json = (await res.json().catch(() => ({}))) as { url?: string; error?: string };
+      if (uploadId !== uploadIdRef.current) return;
+      if (!res.ok) throw new Error(json.error ?? `Upload failed (HTTP ${res.status})`);
+      setForm((p) => ({ ...p, image_url: json.url ?? '' }));
     } catch (err) {
+      if (uploadId !== uploadIdRef.current) return;
       setMsg(err instanceof Error ? err.message : 'Image upload failed');
       setImageFile(null);
       setImagePreview(null);
+      clearPreview();
     } finally {
-      setUploadingImage(false);
+      if (uploadId === uploadIdRef.current) setUploadingImage(false);
     }
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (busy) return;
+    if (uploadingImage) {
+      setMsg('The photo is still uploading: wait for it to finish before publishing.');
+      return;
+    }
     if (isDemoMode()) {
       setMsg('Demo mode: set up Supabase to publish real news.');
       return;
@@ -62,12 +90,13 @@ export function ArticlesManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...form, published: true }),
       });
-      const json = await res.json();
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? 'Save failed');
       setMsg('News published!');
       setForm(EMPTY);
       setImageFile(null);
       setImagePreview(null);
+      clearPreview();
       router.refresh();
     } catch (err) {
       setMsg(err instanceof Error ? err.message : 'Unexpected error');
@@ -97,8 +126,7 @@ export function ArticlesManager({
     <div className="grid lg:grid-cols-[380px_1fr] gap-8">
       <form
         onSubmit={handleSubmit}
-        data-lg-surface
-        className="lg-glass rounded-xl border border-ink/10 p-5 space-y-3 h-fit"
+        className="panel rounded-xl p-5 space-y-3 h-fit"
       >
         <h2 className="masthead text-xl font-bold">New article</h2>
         <div>
@@ -158,7 +186,7 @@ export function ArticlesManager({
                 ) : form.image_url ? (
                   '✓ photo uploaded'
                 ) : (
-                  'JPG, PNG, WebP or GIF · up to 8 MB'
+                  'JPG, PNG, WebP or GIF · up to 4 MB'
                 )}
               </p>
             </div>
@@ -197,16 +225,17 @@ export function ArticlesManager({
         </div>
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || uploadingImage}
           className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand text-paper py-2.5 font-semibold hover:bg-brand-dark disabled:opacity-50"
         >
-          <Upload size={16} /> {busy ? 'Publishing…' : 'Publish article'}
+          <Upload size={16} />{' '}
+          {uploadingImage ? 'Uploading photo…' : busy ? 'Publishing…' : 'Publish article'}
         </button>
-        {msg && <p className="text-sm rounded-lg bg-paper px-3 py-2">{msg}</p>}
+        {msg && <p className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
       </form>
 
       <div>
-        <h2 className="masthead text-xl font-bold mb-4">All articles</h2>
+        <h2 className="masthead editorial-rule mb-4 border-b pb-2 text-2xl font-bold">All articles</h2>
         {initialArticles.length === 0 ? (
           <p className="text-ink/60 text-sm">No articles yet.</p>
         ) : (
@@ -214,8 +243,7 @@ export function ArticlesManager({
             {initialArticles.map((a) => (
               <li
                 key={a.id}
-                data-lg-static
-                className="lg-glass flex items-center gap-3 rounded-xl border border-ink/10 p-3"
+                className="panel flex items-center gap-3 rounded-xl p-3"
               >
                 <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
                   <PenLine size={18} className="text-brand" />

@@ -13,7 +13,7 @@ const config: Config = {
           dark: '#252f86',
           light: '#49a4bb',
         },
-        accent: '#15d8b3',
+        accent: '#00713f',
       },
       fontFamily: {
         display: ['var(--font-poppins)', 'system-ui', 'sans-serif'],

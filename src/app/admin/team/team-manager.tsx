@@ -64,8 +64,7 @@ export function TeamManager({
     <div className="grid lg:grid-cols-[380px_1fr] gap-8">
       <form
         onSubmit={handleInvite}
-        data-lg-surface
-        className="lg-glass rounded-xl border border-ink/10 p-5 space-y-3 h-fit"
+        className="panel rounded-xl p-5 space-y-3 h-fit"
       >
         <h2 className="masthead text-xl font-bold">Invite an editor</h2>
         <div>
@@ -98,7 +97,7 @@ export function TeamManager({
             <option value="admin">Admin (publishes and manages the team)</option>
           </select>
         </div>
-        {msg && <p className="text-sm rounded-lg bg-paper px-3 py-2">{msg}</p>}
+        {msg && <p className="panel-note rounded-lg px-3 py-2 text-sm">{msg}</p>}
         <button
           type="submit"
           disabled={busy}
@@ -114,8 +113,7 @@ export function TeamManager({
           {team.map((m) => (
             <li
               key={m.id}
-              data-lg-static
-              className="lg-glass flex items-center gap-3 rounded-xl border border-ink/10 p-3"
+              className="panel flex items-center gap-3 rounded-xl p-3"
             >
               <div className="w-10 h-10 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
                 {m.role === 'admin' ? (

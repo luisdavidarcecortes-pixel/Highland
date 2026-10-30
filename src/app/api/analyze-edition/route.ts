@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { isDemoMode } from '@/lib/demo';
+import { clientKey, rateLimit } from '@/lib/rate-limit';
+import { GEMINI_URL, GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
-
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent';
-const PRIMARY_MODEL = 'gemini-3.8-flash';
-const FALLBACK_MODEL = 'gemini-3.5-flash';
 
 interface GeminiResponse {
   candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -57,8 +55,20 @@ function parseMetadata(text: string): EditionMetadata | null {
  * POST { text, title? } → issue metadata inferred from PDF text.
  */
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // Without Supabase (demo/local mode) there is no session to check; the Gemini
+  // key still lives server-side. With Supabase configured, editors must sign in.
+  if (!isDemoMode()) {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  const limit = rateLimit(`analyze:${clientKey(req)}`, 30, 10 * 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many analyses from this connection. Try again in a few minutes.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    );
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -68,15 +78,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { text, title } = (await req.json()) as { text?: string; title?: string };
-  const source = (text ?? '').trim();
+  const body: unknown = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ error: 'Invalid JSON payload.' }, { status: 400 });
+  }
+  const { text, title } = body as { text?: unknown; title?: unknown };
+  const source = typeof text === 'string' ? text.trim() : '';
+  const titleHint = typeof title === 'string' ? title : '';
   if (source.length < 20) {
     return NextResponse.json({ error: 'Not enough text to describe.' }, { status: 400 });
   }
 
   const prompt = [
     'Extract metadata for a high-school newspaper issue from its first pages.',
-    title ? `A local text detector suggested this possible title: "${title}".` : '',
+    titleHint ? `A local text detector suggested this possible title: "${titleHint}".` : '',
     'Return only a JSON object with keys: title, description, editionDate, schoolYear, number.',
     'Use null for any field not clearly supported by the text; never guess.',
     'title: the issue headline, not the newspaper masthead.',
@@ -106,14 +121,14 @@ export async function POST(req: NextRequest) {
         }),
       });
 
-    let res = await callGemini(PRIMARY_MODEL);
+    let res = await callGemini(GEMINI_PRIMARY_MODEL);
     if (res.status === 503 || res.status === 429) {
       // Transient demand spikes on the free tier: one retry after a short pause.
       await new Promise((resolve) => setTimeout(resolve, 900));
-      res = await callGemini(PRIMARY_MODEL);
+      res = await callGemini(GEMINI_PRIMARY_MODEL);
     }
     if (res.status === 503 || res.status === 429) {
-      res = await callGemini(FALLBACK_MODEL);
+      res = await callGemini(GEMINI_FALLBACK_MODEL);
     }
     const json = (await res.json()) as GeminiResponse;
     if (!res.ok) {

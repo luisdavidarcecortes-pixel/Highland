@@ -11,7 +11,7 @@
   --palette-indigo: #2f39a9;
   --palette-blue: #2e6fa0;
   --palette-cyan: #49a4bb;
-  --palette-turquoise: #15d8b3;
+  --palette-turquoise: #00713f;
   --border: rgba(73, 164, 187, 0.2);
 }
 
@@ -20,99 +20,160 @@ html {
 }
 
 body {
-  background-color: var(--night);
-  background-image:
-    radial-gradient(ellipse 52% 38% at 18% 12%, rgba(46, 111, 160, 0.19), transparent 76%),
-    radial-gradient(ellipse 44% 34% at 82% 24%, rgba(21, 216, 179, 0.07), transparent 76%),
-    radial-gradient(ellipse at 50% -18%, rgba(47, 57, 169, 0.22), transparent 48%),
-    linear-gradient(125deg, rgba(255, 255, 255, 0.012), transparent 42%, rgba(73, 164, 187, 0.012)),
-    radial-gradient(rgba(73, 164, 187, 0.025) 0.7px, transparent 0.7px);
-  background-size: 170% 170%, 170% 170%, auto, auto, 22px 22px;
-  background-position: 0% 0%, 100% 0%, center top, center, 0 0;
-  color: var(--paper);
+  background-color: #f5f1e8;
+  color: #1c3035;
   font-family: var(--font-poppins), system-ui, sans-serif;
 }
 
-body .site-header [alt="The Highlander"] {
-  filter: brightness(0) invert(1);
+body:has(.public-page) {
+  --public-paper: #f5f1e8;
+  --public-surface: #fffdf8;
+  --public-surface-alt: #eae4d9;
+  --public-ink: #1c3035;
+  --public-muted: #5e6d6e;
+  --public-accent: #a44136;
+  --public-green: #00713f;
+  --public-green-dark: #005a33;
+  --public-green-wash: rgba(0, 113, 63, 0.07);
+  --public-border: rgba(28, 48, 53, 0.15);
+  background-color: var(--public-paper);
+  background-image:
+    radial-gradient(ellipse 60% 38% at 8% 0%, rgba(164, 65, 54, 0.045), transparent 75%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%);
+  color: var(--public-ink);
+}
+
+body:has(.public-page) .public-background {
+  display: none;
+}
+
+body:has(.public-page) .site-header {
+  background-color: rgba(250, 248, 242, 0.96);
+  border-bottom: 1px solid var(--public-border);
 }
 
 body:has(.public-page) .site-header .bg-paper {
-  background-color: var(--surface);
+  background-color: var(--public-surface);
+}
+
+body:has(.public-page) .site-header .text-ink {
+  color: var(--public-ink);
+}
+
+body:has(.public-page) .site-header [class*="text-ink/"] {
+  color: var(--public-muted);
 }
 
 body:has(.public-page) .site-header .text-brand,
-body:has(.public-page) .site-header [class*="hover:text-brand"]:hover {
-  color: var(--palette-turquoise);
+body:has(.public-page) .site-header .text-accent {
+  color: var(--public-green);
 }
 
-body:has(.public-page) .site-header [class~="text-ink"],
+body:has(.public-page) .site-header [class*="border-ink"] {
+  border-color: var(--public-border);
+}
+
+body:has(.public-page) .site-header [alt="The Highlander"] {
+  filter: none;
+}
+
+body:has(.public-page) .site-header [alt="Highland Academy"] {
+  filter: brightness(0);
+  opacity: 0.78;
+}
+
 body:has(.public-page) .public-page [class~="text-ink"] {
-  color: var(--paper);
+  color: var(--public-ink);
 }
 
-body:has(.public-page) .site-header [class*="text-ink/"],
 body:has(.public-page) .public-page [class*="text-ink/"] {
-  color: rgba(234, 244, 245, 0.72);
-}
-
-body:has(.public-page) .public-page .text-brand,
-body:has(.public-page) .public-page .text-accent {
-  color: var(--palette-turquoise);
-}
-
-body:has(.public-page) .public-page [class*="hover:text-brand"]:hover {
-  color: var(--palette-cyan);
+  color: var(--public-muted);
 }
 
 body:has(.public-page) .public-page .bg-white {
-  background-color: var(--surface);
+  background-color: var(--public-surface);
 }
 
 body:has(.public-page) .public-page .bg-paper {
-  background-color: var(--surface-raised);
+  background-color: var(--public-surface-alt);
 }
 
 body:has(.public-page) .public-page [class*="border-ink"] {
-  border-color: var(--border);
+  border-color: var(--public-border);
 }
 
 body:has(.public-page) .public-page .bg-brand {
-  background-color: var(--palette-turquoise);
-  color: var(--night);
+  background-color: var(--public-green);
+  color: #fffdf8;
 }
 
 body:has(.public-page) .public-page [class*="hover:bg-brand-dark"]:hover {
-  background-color: var(--palette-cyan);
+  background-color: var(--public-green-dark);
+}
+
+body:has(.public-page) .public-page .text-brand {
+  color: var(--public-green);
+}
+
+body:has(.public-page) .site-header [class*="hover:text-brand"]:hover,
+body:has(.public-page) .public-page [class*="hover:text-brand"]:hover {
+  color: var(--public-green-dark);
 }
 
 body:has(.public-page) .public-page .public-card {
-  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 58%);
-  box-shadow: 0 16px 44px -28px rgba(0, 0, 0, 0.85);
+  background-color: var(--public-surface);
+  background-image: none;
+  box-shadow: 0 12px 30px -24px rgba(28, 48, 53, 0.42);
   transition:
-    transform 420ms cubic-bezier(0.2, 0.75, 0.25, 1),
-    border-color 320ms ease,
-    box-shadow 420ms ease;
+    transform 240ms ease,
+    border-color 240ms ease,
+    box-shadow 240ms ease;
 }
 
 body:has(.public-page) .public-page a.public-card:hover,
 body:has(.public-page) .public-page article.public-card:hover {
-  transform: translateY(-5px);
-  border-color: rgba(73, 164, 187, 0.55);
-  box-shadow: 0 24px 54px -28px rgba(0, 0, 0, 0.95), 0 0 24px -18px rgba(46, 111, 160, 0.5);
+  transform: translateY(-3px);
+  border-color: rgba(164, 65, 54, 0.38);
+  box-shadow: 0 18px 36px -24px rgba(28, 48, 53, 0.5);
 }
 
 body:has(.public-page) .public-page .public-card img {
-  transition: transform 700ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  transition: transform 360ms ease;
 }
 
 body:has(.public-page) .public-page .public-card:hover img {
-  transform: scale(1.045);
+  transform: scale(1.025);
+}
+
+body:has(.public-page) .masthead {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: -0.035em;
+}
+
+body:has(.public-page) .editorial-kicker {
+  color: var(--public-green);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+body:has(.public-page) .editorial-rule {
+  border-top: 3px double var(--public-ink);
+}
+
+body:has(.public-page) .public-feature {
+  background:
+    linear-gradient(120deg, var(--public-green-wash), transparent 48%),
+    var(--public-surface);
+  border-color: var(--public-border);
+  box-shadow: 0 24px 60px -42px rgba(28, 48, 53, 0.48);
 }
 
 body:has(.public-page) .site-footer {
-  background-color: rgba(23, 30, 85, 0.78);
-  border-top: 1px solid var(--border);
+  background-color: #00713f;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fffdf8;
 }
 
 body:has(.public-page) .reveal {
@@ -127,18 +188,56 @@ body:has(.public-page) .reveal.is-visible {
 }
 
 body:has(.public-page) .public-page .prose {
-  --tw-prose-body: rgba(234, 244, 245, 0.82);
-  --tw-prose-headings: var(--paper);
-  --tw-prose-bold: var(--paper);
-  --tw-prose-links: var(--palette-cyan);
-  --tw-prose-bullets: var(--palette-cyan);
-  --tw-prose-counters: var(--palette-cyan);
-  --tw-prose-hr: var(--border);
-  --tw-prose-quotes: var(--paper);
-  --tw-prose-quote-borders: var(--palette-blue);
-  --tw-prose-captions: rgba(234, 244, 245, 0.72);
-  --tw-prose-code: var(--paper);
-  --tw-prose-pre-bg: var(--night);
+  --tw-prose-body: var(--public-ink);
+  --tw-prose-headings: var(--public-ink);
+  --tw-prose-bold: var(--public-ink);
+  --tw-prose-links: var(--public-accent);
+  --tw-prose-bullets: var(--public-accent);
+  --tw-prose-counters: var(--public-accent);
+  --tw-prose-hr: var(--public-border);
+  --tw-prose-quotes: var(--public-ink);
+  --tw-prose-quote-borders: var(--public-accent);
+  --tw-prose-captions: var(--public-muted);
+  --tw-prose-code: var(--public-ink);
+  --tw-prose-pre-bg: var(--public-surface-alt);
+}
+
+/* ---------- Admin panel: paper cards and light fields -------------------- */
+/* The admin lives on the public paper shell, so the dark glass surfaces and
+   dark inputs from the global styles must yield to light, readable ones. */
+body:has(.public-page) .admin-shell .panel {
+  background-color: var(--public-surface);
+  border: 1px solid var(--public-border);
+  box-shadow: 0 12px 30px -24px rgba(28, 48, 53, 0.42);
+}
+
+body:has(.public-page) .admin-shell input:not([type='file']),
+body:has(.public-page) .admin-shell textarea,
+body:has(.public-page) .admin-shell select {
+  background-color: #fffdf8;
+  color: var(--public-ink);
+  box-shadow: inset 0 1px 0 rgba(28, 48, 53, 0.06);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+body:has(.public-page) .admin-shell input::placeholder,
+body:has(.public-page) .admin-shell textarea::placeholder {
+  color: rgba(28, 48, 53, 0.42);
+}
+
+body:has(.public-page) .admin-shell input:not([type='file']):focus,
+body:has(.public-page) .admin-shell textarea:focus,
+body:has(.public-page) .admin-shell select:focus {
+  outline: 2px solid var(--public-green);
+  outline-offset: 1px;
+  border-color: var(--public-green);
+}
+
+body:has(.public-page) .admin-shell .panel-note {
+  background-color: var(--public-green-wash);
+  border: 1px solid rgba(0, 113, 63, 0.22);
+  color: var(--public-ink);
 }
 
 body .bg-white {
@@ -331,17 +430,17 @@ body:has(.public-page) .public-page .lg-glass.public-card:hover {
 /* Text fields are rectangles too, so they get the same treatment — but only the
    frosted rung: at ~40px tall a refraction bezel has nothing to bend, and one
    live filter per field would be all cost and no effect. */
-body input:not([type='file']),
-body textarea,
-body select {
+body:not(:has(.public-page)) input:not([type='file']),
+body:not(:has(.public-page)) textarea,
+body:not(:has(.public-page)) select {
   background-color: var(--lg-tint-solid);
   box-shadow: inset 0 1px 0 var(--lg-rim-soft);
 }
 
 @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  body input:not([type='file']),
-  body textarea,
-  body select {
+  body:not(:has(.public-page)) input:not([type='file']),
+  body:not(:has(.public-page)) textarea,
+  body:not(:has(.public-page)) select {
     background-color: var(--lg-tint);
     -webkit-backdrop-filter: blur(10px) saturate(160%);
     backdrop-filter: blur(10px) saturate(160%);
@@ -349,9 +448,9 @@ body select {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  body input:not([type='file']),
-  body textarea,
-  body select {
+  body:not(:has(.public-page)) input:not([type='file']),
+  body:not(:has(.public-page)) textarea,
+  body:not(:has(.public-page)) select {
     background-color: var(--lg-tint-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;

@@ -3,8 +3,7 @@ import { Poppins } from 'next/font/google';
 import './globals.css';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
-import { VideoBackground } from '@/components/video-background';
-import { GlassSurfaces, LiquidGlassDefs } from '@/components/liquid-glass';
+import { LiquidGlassDefs } from '@/components/liquid-glass';
 
 const poppins = Poppins({
   subsets: ['latin'],
@@ -28,11 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={poppins.variable}>
       <body className="min-h-screen flex flex-col">
-        <VideoBackground />
         <LiquidGlassDefs />
-        <GlassSurfaces />
         <SiteHeader />
-        <main className="relative z-10 flex-1 mt-[20px]">{children}</main>
+        <main className="relative z-10 flex-1">{children}</main>
         <SiteFooter />
       </body>
     </html>

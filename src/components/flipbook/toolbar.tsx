@@ -29,7 +29,7 @@ import {
   panelIn,
   panelInLeft,
 } from './motion-tokens';
-import { LiquidGlass, useRefraction } from '@/components/liquid-glass';
+import { useRefraction } from '@/components/liquid-glass';
 
 interface ToolbarProps {
   page: number;
@@ -56,12 +56,17 @@ interface ToolbarProps {
 }
 
 const btn =
-  'p-2 rounded-lg text-paper/90 hover:bg-paper/15 transition-colors disabled:opacity-30';
+  'p-2 rounded-lg text-ink/80 hover:bg-ink/5 transition-colors disabled:opacity-30';
 
 /** Odometer-style page counter: digits slide vertically on change. */
 function PageOdometer({ page, pageCount }: { page: number; pageCount: number }) {
   return (
-    <span className="text-paper/90 text-xs tabular-nums min-w-20 text-center inline-flex justify-center">
+    <span
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="text-ink/70 text-xs tabular-nums min-w-20 text-center inline-flex justify-center"
+    >
       <span className="relative inline-block">
         <span aria-hidden className="invisible">
           {page} / {pageCount}
@@ -85,12 +90,12 @@ function PageOdometer({ page, pageCount }: { page: number; pageCount: number }) 
 
 export function Toolbar(p: ToolbarProps) {
   return (
-    <LiquidGlass radius={0} className="lg-glass-dark absolute top-0 left-0 right-0 z-10">
+    <div className="absolute top-0 left-0 right-0 z-10 border-b border-ink/10 bg-[#ffffff]">
     <motion.div
       variants={staggerParent}
       initial="hidden"
       animate="show"
-      className="flex items-center justify-between gap-2 p-2 bg-gradient-to-b from-ink/80 to-transparent"
+      className="flex items-center justify-between gap-2 p-2"
     >
       <motion.div variants={itemFromTop} className="flex items-center gap-1">
         <button className={btn} onClick={p.onPrev} disabled={p.page <= 1} title="Previous page (←)" aria-label="Previous page">
@@ -110,7 +115,7 @@ export function Toolbar(p: ToolbarProps) {
         </button>
         {p.pageCount > 2 && (
           <button
-            className={btn}
+            className={`${btn} hidden sm:inline-flex`}
             onClick={p.onToggleStrip}
             title={p.strip ? 'Hide page strip' : 'Show page strip'}
             aria-label={p.strip ? 'Hide page strip' : 'Show page strip'}
@@ -121,53 +126,59 @@ export function Toolbar(p: ToolbarProps) {
         )}
       </motion.div>
       <motion.div variants={itemFromTop} className="flex items-center gap-1">
-        <button
-          className={btn}
-          onClick={p.onZoomOut}
-          disabled={p.zoom <= 0.6}
-          title="Zoom out (-)"
-          aria-label="Zoom out"
-        >
-          <ZoomOut size={18} />
-        </button>
-        <span className="text-paper/70 text-xs tabular-nums min-w-10 text-center" aria-live="polite">
-          {Math.round(p.zoom * 100)}%
-        </span>
-        <button
-          className={btn}
-          onClick={p.onZoomIn}
-          disabled={p.zoom >= 2}
-          title="Zoom in (+)"
-          aria-label="Zoom in"
-        >
-          <ZoomIn size={18} />
-        </button>
+        {/* Zoom, copy-link, sound and fullscreen are secondary on a phone: the
+            narrowed toolbar used to be clipped past 100%, leaving them (and the
+            controls after them) unreachable. They reappear at ≥640px. */}
+        <div className="hidden sm:flex items-center gap-1">
+          <button
+            className={btn}
+            onClick={p.onZoomOut}
+            disabled={p.zoom <= 0.6}
+            title="Zoom out (-)"
+            aria-label="Zoom out"
+          >
+            <ZoomOut size={18} />
+          </button>
+          <span className="text-ink/60 text-xs tabular-nums min-w-10 text-center" aria-live="polite">
+            {Math.round(p.zoom * 100)}%
+          </span>
+          <button
+            className={btn}
+            onClick={p.onZoomIn}
+            disabled={p.zoom >= 2}
+            title="Zoom in (+)"
+            aria-label="Zoom in"
+          >
+            <ZoomIn size={18} />
+          </button>
+        </div>
         <button className={btn} onClick={p.onToggleSearch} title="Search (S)" aria-label="Search" aria-pressed={p.searchOpen}>
           <Search size={18} />
         </button>
         <button className={btn} onClick={p.onToggleToc} title="Contents (T)" aria-label="Contents" aria-pressed={p.tocOpen}>
           <List size={18} />
         </button>
-        <button className={btn} onClick={p.onCopyLink} title="Copy link to this page" aria-label="Copy link to this page">
+        <button className={`${btn} hidden sm:inline-flex`} onClick={p.onCopyLink} title="Copy link to this page" aria-label="Copy link to this page">
           {p.copied ? <Check size={18} className="text-emerald-400" /> : <Link2 size={18} />}
         </button>
-        <button className={btn} onClick={p.onToggleSound} title={p.sound ? 'Sound on' : 'Sound off'} aria-label="Page turn sound">
+        <button className={`${btn} hidden sm:inline-flex`} onClick={p.onToggleSound} title={p.sound ? 'Sound on' : 'Sound off'} aria-label="Page turn sound">
           {p.sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
         <button className={btn} onClick={p.onToggleThumbs} title="Thumbnails (G)" aria-label="Thumbnails">
           <Grid3x3 size={18} />
         </button>
-        <button className={btn} onClick={p.onFullscreen} title="Fullscreen (F)" aria-label="Fullscreen">
+        <button className={`${btn} hidden sm:inline-flex`} onClick={p.onFullscreen} title="Fullscreen (F)" aria-label="Fullscreen">
           <Maximize size={18} />
         </button>
       </motion.div>
     </motion.div>
-    </LiquidGlass>
+    </div>
   );
-}export function ThumbsCloseButton({ onClick }: { onClick: () => void }) {
+}
+export function ThumbsCloseButton({ onClick }: { onClick: () => void }) {
   return (
     <button
-      className="absolute top-2 right-2 z-10 p-2 rounded-lg text-paper/90 hover:bg-paper/15"
+      className="absolute top-2 right-2 z-10 p-2 rounded-lg text-ink/80 hover:bg-ink/5"
       onClick={onClick}
       aria-label="Close thumbnails"
     >
@@ -233,7 +244,7 @@ export function Filmstrip({
       animate={{ y: 0 }}
       exit={{ y: 80, transition: { duration: 0.25, ease: 'easeIn' } }}
       transition={springSoft}
-      className="lg-glass lg-glass-dark absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-ink/95 to-ink/60 px-2 pt-2 pb-2"
+      className="absolute bottom-0 left-0 right-0 z-10 border-t border-ink/10 bg-[#ffffff] px-2 pt-2 pb-2"
     >
       <div ref={containerRef} className="overflow-hidden">
         <motion.div
@@ -294,34 +305,34 @@ export function SearchPanel({
       initial="hidden"
       animate="show"
       exit="exit"
-      className="lg-glass lg-glass-dark absolute top-12 left-1/2 -translate-x-1/2 z-20 w-[min(92%,26rem)] text-paper rounded-xl shadow-page border border-paper/10 p-3"
+      className="absolute top-12 left-1/2 -translate-x-1/2 z-20 w-[min(92%,26rem)] rounded-xl bg-[#ffffff] text-ink shadow-xl border border-ink/15 p-3"
     >
       <div className="flex items-center gap-2">
-        <Search size={16} className="text-paper/60 shrink-0" />
+        <Search size={16} className="text-ink/50 shrink-0" />
         <input
           autoFocus
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search in the newspaper…"
-          className="flex-1 bg-transparent outline-none text-sm placeholder:text-paper/40"
+          className="flex-1 bg-transparent outline-none text-sm placeholder:text-ink/40"
         />
-        <button className="p-1 rounded hover:bg-paper/15" onClick={onClose} aria-label="Close search">
+        <button className="p-1 rounded hover:bg-ink/5" onClick={onClose} aria-label="Close search">
           <X size={16} />
         </button>
       </div>
       {query.trim().length >= 2 && (
-        <div className="mt-2 max-h-56 overflow-auto nice-scroll divide-y divide-paper/10">
-          {results.length === 0 && <p className="text-paper/60 text-xs px-1 py-2">No results.</p>}
+        <div className="mt-2 max-h-56 overflow-auto nice-scroll divide-y divide-ink/10">
+          {results.length === 0 && <p className="text-ink/50 text-xs px-1 py-2">No results.</p>}
           {results.slice(0, 20).map((r) => (
             <button
               key={r.page}
               onClick={() => onGo(r.page)}
-              className="w-full text-left px-1 py-2 hover:bg-paper/10 rounded flex gap-2 items-start"
+              className="w-full text-left px-1 py-2 hover:bg-ink/5 rounded flex gap-2 items-start"
             >
-              <span className="text-[10px] bg-paper/15 rounded px-1.5 py-0.5 tabular-nums shrink-0 mt-0.5">
+              <span className="text-[10px] bg-ink/10 rounded px-1.5 py-0.5 tabular-nums shrink-0 mt-0.5">
                 p.{r.page}
               </span>
-              <span className="text-xs text-paper/85">{r.snippet}</span>
+              <span className="text-xs text-ink/75">{r.snippet}</span>
             </button>
           ))}
         </div>
@@ -350,16 +361,16 @@ export function TocPanel({
       initial="hidden"
       animate="show"
       exit="exit"
-      className="lg-glass lg-glass-dark absolute top-12 left-3 z-20 w-[min(80%,16rem)] max-h-[70%] overflow-auto nice-scroll text-paper rounded-xl shadow-page border border-paper/10 p-2"
+      className="absolute top-12 left-3 z-20 w-[min(80%,16rem)] max-h-[70%] overflow-auto nice-scroll text-ink rounded-xl bg-[#ffffff] shadow-xl border border-ink/15 p-2"
     >
       <div className="flex items-center justify-between px-1 pb-2">
-        <p className="text-xs font-semibold tracking-wide text-paper/70 uppercase">Contents</p>
-        <button className="p-1 rounded hover:bg-paper/15" onClick={onClose} aria-label="Close contents">
+        <p className="text-xs font-semibold tracking-wide text-ink/60 uppercase">Contents</p>
+        <button className="p-1 rounded hover:bg-ink/5" onClick={onClose} aria-label="Close contents">
           <X size={16} />
         </button>
       </div>
       {items.length === 0 && (
-        <p className="text-paper/60 text-xs px-1 pb-2">
+        <p className="text-ink/50 text-xs px-1 pb-2">
           No sections detected in this issue.
         </p>
       )}
@@ -368,9 +379,9 @@ export function TocPanel({
           <li key={it.page}>
             <button
               onClick={() => onGo(it.page)}
-              className="w-full text-left px-2 py-2 rounded-lg hover:bg-paper/10 flex items-baseline gap-2"
+              className="w-full text-left px-2 py-2 rounded-lg hover:bg-ink/5 flex items-baseline gap-2"
             >
-              <span className="text-[10px] bg-paper/15 rounded px-1.5 py-0.5 tabular-nums shrink-0">
+              <span className="text-[10px] bg-ink/10 rounded px-1.5 py-0.5 tabular-nums shrink-0">
                 p.{it.page}
               </span>
               <span className="text-sm truncate">{it.title}</span>

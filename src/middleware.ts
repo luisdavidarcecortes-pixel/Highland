@@ -43,5 +43,14 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/admin', '/api/analyze-edition', '/api/detect-page-numbers'],
+  matcher: [
+    '/admin/:path*',
+    '/admin',
+    '/api/analyze-edition',
+    '/api/detect-page-numbers',
+    '/api/editions/:path*',
+    '/api/articles/:path*',
+    '/api/team/:path*',
+    '/api/upload-image',
+  ],
 };

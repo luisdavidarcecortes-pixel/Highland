@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
+const docCache = new Map<string, PDFDocumentProxy>();
+
 export function usePdfDoc(url: string | null) {
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(false);
@@ -14,6 +16,13 @@ export function usePdfDoc(url: string | null) {
   useEffect(() => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
     if (!url) return;
+    if (docCache.has(url)) {
+      setDoc(docCache.get(url)!);
+      setLoading(false);
+      setError(null);
+      setProgress(1);
+      return;
+    }
     let cancelled = false;
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     setLoading(true);
@@ -63,6 +72,7 @@ export function usePdfDoc(url: string | null) {
 
         setProgress(1);
         const d = await pdfjsLib.getDocument({ data }).promise;
+        if (url) docCache.set(url, d);
         if (!cancelled) setDoc(d);
       } catch {
         if (!cancelled) setError('The PDF could not be loaded.');

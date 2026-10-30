@@ -5,7 +5,10 @@ import { slugify } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 MB
+// Vercel caps a serverless request body at 4.5 MB, so anything larger than
+// this would pass validation here and then die at the platform with an opaque
+// 413. Rejecting early gives the editor a message they can act on.
+const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 
 const EXT: Record<string, string> = {
@@ -23,13 +26,14 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
-  const form = await req.formData();
+  const form = await req.formData().catch(() => null);
+  if (!form) return NextResponse.json({ error: 'Invalid form data.' }, { status: 400 });
   const image = form.get('image') as File | null;
   if (!image || image.size === 0) {
     return NextResponse.json({ error: 'No image provided.' }, { status: 400 });
   }
   if (image.size > MAX_IMAGE_BYTES) {
-    return NextResponse.json({ error: 'Image is larger than 8 MB.' }, { status: 400 });
+    return NextResponse.json({ error: 'Image is larger than 4 MB.' }, { status: 400 });
   }
   if (!ALLOWED.includes(image.type)) {
     return NextResponse.json(

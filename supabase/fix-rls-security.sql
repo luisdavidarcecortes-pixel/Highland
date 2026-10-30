@@ -46,10 +46,42 @@ create policy "self insert" on public.profiles
   for insert to authenticated
   with check (id = auth.uid() and role = 'editor');
 
--- 5) Proof: expect exactly the four policies above, with both
---    qual and with_check filled in. Paste the result back if anything
---    looks off.
+-- 5) Harden the bucket: editors can only upload to the paths the app uses.
+--    `storage.foldername(name)` is text[], so index it before comparing —
+--    `foldername(name) in ('editions')` compares an array to a string and
+--    never matches.
+drop policy if exists "editors upload newspaper" on storage.objects;
+create policy "editors upload newspaper" on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'newspaper'
+    and (
+      public.is_admin()
+      or (storage.foldername(name))[1] in ('articles', 'covers', 'editions')
+    )
+  );
+
+-- 6) Replacing or deleting an object is admin-only (it is admin-only in the
+--    API too: /api/editions DELETE). Server-side cleanup uses the service role.
+drop policy if exists "editors update newspaper" on storage.objects;
+drop policy if exists "admins update newspaper" on storage.objects;
+create policy "admins update newspaper" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'newspaper' and public.is_admin())
+  with check (bucket_id = 'newspaper' and public.is_admin());
+
+drop policy if exists "editors delete newspaper" on storage.objects;
+drop policy if exists "admins delete newspaper" on storage.objects;
+create policy "admins delete newspaper" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'newspaper' and public.is_admin());
+
+-- 7) Proof: the admin profile rules still hold, and bucket paths stay limited.
 select policyname, cmd, qual, with_check
   from pg_policies
  where schemaname = 'public' and tablename = 'profiles'
+ union all
+select policyname, cmd, qual, with_check
+  from pg_policies
+ where schemaname = 'storage' and tablename = 'objects'
  order by policyname;

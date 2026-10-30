@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@/lib/supabase-server';
-import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getSessionUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -27,25 +26,42 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json();
-  const email = String(body.email ?? '').trim().toLowerCase();
-  const fullName = String(body.fullName ?? '').trim();
-  const role = body.role === 'admin' ? 'admin' : 'editor';
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ error: 'Invalid JSON payload.' }, { status: 400 });
+  }
+  const email = String((body as Record<string, unknown>).email ?? '').trim().toLowerCase();
+  const fullName = String((body as Record<string, unknown>).fullName ?? '').trim();
+  const role = (body as Record<string, unknown>).role === 'admin' ? 'admin' : 'editor';
   if (!email) return NextResponse.json({ error: 'Missing email' }, { status: 400 });
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? req.nextUrl.origin;
   const { data, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: siteUrl,
+    data: { full_name: fullName || null },
   });
   if (inviteErr) return NextResponse.json({ error: inviteErr.message }, { status: 400 });
 
   if (data.user) {
-    await supabase.from('profiles').upsert({
+    // The invite trigger already created an editor profile. This upsert must
+    // run with the service role: the "self insert" policy requires
+    // id = auth.uid(), which is false for the user being invited, so the
+    // session client's upsert failed and the chosen role was silently dropped.
+    const { error: profileErr } = await admin.from('profiles').upsert({
       id: data.user.id,
       email,
       full_name: fullName || null,
       role,
     });
+    if (profileErr) {
+      // Never report success for a half-finished invite: without the profile
+      // row the account would have no role at all.
+      await admin.auth.admin.deleteUser(data.user.id);
+      return NextResponse.json(
+        { error: `The invitation could not be saved: ${profileErr.message}` },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });
@@ -84,7 +100,15 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
   if (id === user.id) return NextResponse.json({ error: 'You cannot remove yourself' }, { status: 400 });
 
-  await admin.auth.admin.deleteUser(id);
+  const { error: authErr } = await admin.auth.admin.deleteUser(id);
+  if (authErr) {
+    // Stopping here keeps the removal atomic-ish: deleting only the profile
+    // would leave a live account that getSessionUser still recognises.
+    return NextResponse.json(
+      { error: `The account could not be removed: ${authErr.message}` },
+      { status: 500 },
+    );
+  }
   const { error: dbErr } = await supabase.from('profiles').delete().eq('id', id);
   if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
   return NextResponse.json({ ok: true });

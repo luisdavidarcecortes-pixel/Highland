@@ -36,14 +36,13 @@ export default async function ReadEditionPage({ params }: Props) {
   return (
     <div className="public-page relative mx-auto max-w-6xl px-4 py-8">
       <div
-        data-lg-surface
-        className="lg-glass flex items-center justify-between gap-4 mb-5 rounded-2xl border border-ink/15 p-5"
+        className="mb-5 flex items-center justify-between gap-4 border-b border-ink/15 pb-5"
       >
         <div>
-          <Link href="/archive" className="text-sm text-ink/60 hover:text-ink inline-flex items-center gap-1">
+          <Link href="/archive" className="inline-flex items-center gap-1 text-sm font-semibold text-ink/60 hover:text-ink">
             <ArrowLeft size={14} /> Archive
           </Link>
-          <h1 className="masthead text-2xl md:text-3xl font-bold mt-1">{edition?.title}</h1>
+          <h1 className="masthead mt-2 text-3xl font-bold md:text-4xl">{edition?.title}</h1>
           <p className="text-sm text-ink/60">
             {issue && `${issue} · `}
             {edition ? formatMonthEs(edition.edition_date) : ''} · School year {edition?.school_year}
@@ -52,7 +51,7 @@ export default async function ReadEditionPage({ params }: Props) {
         </div>
       </div>
 
-      {edition && <Flipbook pdfUrl={edition.pdf_url} title={edition.title} editionId={edition.id} />}
+      {edition && <Flipbook key={edition.id} pdfUrl={edition.pdf_url} title={edition.title} editionId={edition.id} />}
 
       <p className="text-center text-xs text-ink/50 mt-4">
         Use the keyboard arrows, drag the page corner, or tap the buttons to flip through the pages.

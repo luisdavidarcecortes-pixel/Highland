@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
-import { Reveal } from '@/components/reveal';
 
 const LINKS = [
   { href: '/', label: 'Home' },
@@ -20,13 +19,12 @@ export function SiteHeader() {
 
   return (
     <header className="site-header relative z-10">
-      <Reveal as="div" delay={0}>
-        {/* Logo sits beside the masthead on wide screens; on narrow ones the
-            masthead would collide with it, so only the masthead is shown. */}
+      <div className="mx-auto max-w-7xl px-4 sm:px-6">
+        <div className="relative flex min-h-[88px] items-center justify-center py-4 md:min-h-[112px] md:py-5">
         <Link
           href="/"
-          className="absolute left-[28px] sm:left-[32px] z-10 hidden md:flex items-center gap-3"
-          style={{ top: 'calc(50% - 20px)', transform: 'translateY(-50%)' }}
+          className="absolute -left-10 hidden items-center gap-3 md:flex"
+          aria-label="Highland Academy home"
         >
           <Image
             src="/brand/logo-white.png"
@@ -34,59 +32,66 @@ export function SiteHeader() {
             width={226}
             height={80}
             priority
-            className="h-12 md:h-16 w-auto"
+            className="h-[75px] w-auto"
           />
-          <span className="w-px h-10 bg-ink/20" />
         </Link>
 
-        <div className="mx-auto max-w-6xl px-4 pt-5 pb-3 md:pt-6 md:pb-2 h-auto grid grid-cols-[1fr_auto_1fr] items-center gap-4 mt-[20px]">
-          <div aria-hidden />
-
-          <Link href="/" aria-label="The Highlander — home" className="block justify-self-center">
+          <Link href="/" aria-label="The Highlander — home" className="block">
             <Image
               src="/brand/masthead-highlander-cut.png"
               alt="The Highlander"
               width={952}
               height={159}
               priority
-              className="w-64 sm:w-80 md:w-[26rem] lg:w-[36rem] h-auto"
+              className="h-auto w-72 sm:w-80 md:w-[30rem] lg:w-[36rem]"
             />
           </Link>
 
-          <div className="flex items-center justify-end gap-1">
-            <button className="md:hidden p-2" onClick={() => setOpen(!open)} aria-label="Menu">
+          <div className="absolute right-0 flex items-center justify-end">
+            <button
+              className="rounded-full p-2 text-ink hover:bg-ink/5 md:hidden"
+              onClick={() => setOpen(!open)}
+              aria-label={open ? 'Close menu' : 'Open menu'}
+              aria-expanded={open}
+            >
               {open ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
-      </Reveal>
 
-      <Reveal as="nav" delay={80} className="relative top-[40px] hidden md:flex justify-center gap-1 px-4 pb-4">
-        {LINKS.map((l) => (
-          <Link
-            key={l.href}
-            href={l.href}
-            className={`px-3 py-1.5 text-sm transition-colors hover:text-brand ${
-              pathname === l.href ? 'text-brand' : 'text-ink'
-            }`}
-          >
-            {l.label}
-          </Link>
-        ))}
-      </Reveal>
-      {open && (
-        <div className="md:hidden border-t border-ink/10 bg-paper">
-          {LINKS.map((l) => (
+        <nav aria-label="Main navigation" className="hidden items-center justify-center gap-8 py-3 md:flex">
+          {LINKS.map((link) => (
             <Link
-              key={l.href}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="block px-4 py-3 text-sm"
+              key={link.href}
+              href={link.href}
+              aria-current={pathname === link.href ? 'page' : undefined}
+              className={`border-b-2 px-1 py-1 text-xs font-semibold uppercase tracking-[0.14em] transition-all duration-300 ${
+                pathname === link.href
+                  ? 'border-[#005a33] text-[#005a33]'
+                  : 'border-transparent text-ink/70 hover:border-[#005a33] hover:text-[#005a33]'
+              }`}
             >
-              {l.label}
+              {link.label}
             </Link>
           ))}
-        </div>
+        </nav>
+      </div>
+      {open && (
+        <nav aria-label="Mobile navigation" className="border-t border-ink/10 bg-paper md:hidden">
+          {LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setOpen(false)}
+              aria-current={pathname === link.href ? 'page' : undefined}
+              className={`block border-b border-ink/10 px-5 py-3 text-sm font-semibold ${
+                pathname === link.href ? 'text-brand' : 'text-ink'
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </nav>
       )}
     </header>
   );

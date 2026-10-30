@@ -10,8 +10,7 @@ export function EditionCard({ edition }: { edition: Edition }) {
     <Reveal as="div" delay={0} className="h-full">
       <Link
         href={`/read/${edition.id}`}
-        data-lg-surface
-        className="lg-glass public-card group block h-full rounded-xl border border-ink/10 overflow-hidden transition-shadow"
+        className="public-card group block h-full overflow-hidden rounded-xl border border-ink/10 transition-shadow"
       >
         <EditionCover
           coverUrl={edition.cover_url}
@@ -40,8 +39,7 @@ export function ArticleCard({ article }: { article: Article }) {
   return (
     <Reveal as="div" delay={0} className="h-full">
       <article
-        data-lg-surface
-        className="lg-glass public-card h-full rounded-xl border border-ink/10 overflow-hidden"
+        className="public-card h-full overflow-hidden rounded-xl border border-ink/10"
       >
         {article.image_url && (
           <div className="aspect-video relative overflow-hidden">

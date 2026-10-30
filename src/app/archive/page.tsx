@@ -21,9 +21,12 @@ export default async function ArchivePage() {
   const years = Array.from(byYear.keys()).sort().reverse();
 
   return (
-    <div className="public-page mx-auto max-w-6xl px-4 py-10">
-      <h1 className="masthead text-3xl font-bold">Archive</h1>
-      <p className="text-ink/60 mt-1 mb-8">
+    <div className="public-page mx-auto max-w-6xl px-4 py-10 md:py-14">
+      <header className="editorial-rule mb-9 border-b pb-5 md:mb-12">
+        <p className="editorial-kicker mb-2">The Highlander collection</p>
+        <h1 className="masthead text-4xl font-bold md:text-5xl">Archive</h1>
+      </header>
+      <p className="mb-8 -mt-5 max-w-2xl text-ink/60">
         Every issue of the newspaper, ready to flip through.
       </p>
 
@@ -33,7 +36,7 @@ export default async function ArchivePage() {
 
       {years.map((year) => (
         <section key={year} className="mb-10">
-          <h2 className="masthead text-xl font-bold border-b-2 border-ink pb-1 mb-5">
+          <h2 className="masthead editorial-rule mb-5 border-b pb-2 text-2xl font-bold">
             School year {year}
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5">

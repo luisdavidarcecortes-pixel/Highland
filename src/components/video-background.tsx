@@ -35,7 +35,8 @@ export function VideoBackground() {
 
       const remaining = video.duration - video.currentTime;
       const visibility = Math.min(1, remaining / LOOP_FADE_S, video.currentTime / LOOP_FADE_S);
-      fade.style.opacity = (1 - visibility).toFixed(2);
+      const next = (1 - visibility).toFixed(2);
+      if (fade.style.opacity !== next) fade.style.opacity = next;
     };
 
     const sync = () => {
@@ -64,14 +65,13 @@ export function VideoBackground() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#07130f]"
+      className="public-background pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-[#07130f]"
     >
       <div className="absolute inset-0">
         <video
           ref={videoRef}
           className="h-full w-full object-cover brightness-125"
-          src="/bg/milky-way.mp4"
-          poster="/bg/milky-way.jpg"
+          src="/bg/595873_Drone_Landscape_Nature_1280x720.mp4"
           muted
           loop
           playsInline

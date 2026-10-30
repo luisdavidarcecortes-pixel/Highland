@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { isDemoMode } from '@/lib/demo';
+import { clientKey, rateLimit } from '@/lib/rate-limit';
+import { GEMINI_URL, GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
 
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent';
-const PRIMARY_MODEL = 'gemini-3.8-flash';
-const FALLBACK_MODEL = 'gemini-3.5-flash';
 const MAX_PAGES_PER_REQUEST = 6;
 const MAX_IMAGE_LENGTH = 300_000;
 
@@ -88,8 +87,20 @@ function parsePageNumbers(
 }
 
 export async function POST(req: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  if (!isDemoMode()) {
+    const user = await getSessionUser();
+    if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+
+  // Each call sends up to six page images to Gemini: without a cap this is the
+  // most expensive endpoint to abuse.
+  const limit = rateLimit(`detect:${clientKey(req)}`, 60, 10 * 60 * 1000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: 'Too many page-number checks from this connection. Try again in a few minutes.' },
+      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
+    );
+  }
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -132,13 +143,13 @@ export async function POST(req: NextRequest) {
     });
 
   try {
-    let response = await callGemini(PRIMARY_MODEL);
+    let response = await callGemini(GEMINI_PRIMARY_MODEL);
     if (response.status === 429 || response.status === 503) {
       await new Promise((resolve) => setTimeout(resolve, 900));
-      response = await callGemini(PRIMARY_MODEL);
+      response = await callGemini(GEMINI_PRIMARY_MODEL);
     }
     if (response.status === 429 || response.status === 503) {
-      response = await callGemini(FALLBACK_MODEL);
+      response = await callGemini(GEMINI_FALLBACK_MODEL);
     }
 
     const result = (await response.json()) as GeminiResponse;

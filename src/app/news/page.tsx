@@ -13,9 +13,14 @@ export default async function NewsPage() {
   const articles = await getPublishedArticles();
 
   return (
-    <div className="public-page mx-auto max-w-6xl px-4 py-10">
-      <h1 className="masthead text-3xl font-bold">News</h1>
-      <p className="text-ink/60 mt-1 mb-8">What is happening at school, up to date.</p>
+    <div className="public-page mx-auto max-w-6xl px-4 py-10 md:py-14">
+      <header className="editorial-rule mb-9 border-b pb-5 md:mb-12">
+        <p className="editorial-kicker mb-2">Around campus</p>
+        <h1 className="masthead text-4xl font-bold md:text-5xl">News</h1>
+      </header>
+      <p className="mb-8 -mt-5 max-w-2xl text-ink/60">
+        What is happening at school, up to date.
+      </p>
 
       {articles.length === 0 ? (
         <p className="text-ink/60">No news published yet.</p>

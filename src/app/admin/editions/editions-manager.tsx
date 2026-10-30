@@ -52,6 +52,10 @@ export function EditionsManager({
       : `${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}`;
 
   function startEditing(ed: Edition) {
+    // Any analysis still running belongs to the previous form: cancel it so it
+    // cannot fill this edition's fields or attach its PDF as a replacement.
+    analysisRunRef.current += 1;
+    setAnalyzing(false);
     manuallyEditedRef.current.clear();
     setEditingEdition(ed);
     setFile(null);
@@ -199,6 +203,8 @@ export function EditionsManager({
         );
       }
     } catch (err) {
+      // A superseded run must not clear the file the user just picked.
+      if (runId !== analysisRunRef.current) return;
       setFile(null);
       setCover(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
@@ -215,6 +221,7 @@ export function EditionsManager({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMsg(null);
+    if (busy || analyzing) return;
     if (isDemoMode()) {
       setMsg('Demo mode: set up Supabase to publish real issues.');
       return;
@@ -232,20 +239,11 @@ export function EditionsManager({
     try {
       const stamp = Date.now();
       const slug = slugify(form.title) || 'issue';
-      let pdfPath: string | null = null;
       let coverPath: string | null = null;
+      let pdfPath: string | null = null;
 
       if (file && cover) {
-        // The files go straight to Storage instead of through /api/editions:
-        // a serverless host cuts any request body at 4.5 MB and this PDF is
-        // ~44 MB, so posting it through the API would be a 413 in production
-        // while working perfectly in dev. Only the small paths travel through
-        // the API afterwards.
-        //
-        // The cover goes first — a few hundred KB, so if the big PDF then
-        // fails, the orphan left in the 1 GB free quota is negligible. Both
-        // paths carry this attempt's stamp, which is what the server checks
-        // before it lets the row point at them.
+        // Upload directly to Storage: the PDF is too large to pass through an API route.
         coverPath = `covers/${stamp}-${slug}.jpg`;
         await uploadObject(coverPath, cover, 'image/jpeg', (fraction) =>
           setProgress(Math.round(fraction * 5)),
@@ -333,8 +331,7 @@ export function EditionsManager({
     <div className="grid lg:grid-cols-[380px_1fr] gap-8">
       <form
         onSubmit={handleSubmit}
-        data-lg-surface
-        className="lg-glass rounded-xl border border-ink/10 p-5 space-y-3 h-fit"
+        className="panel rounded-xl p-5 space-y-3 h-fit"
       >
         <div className="flex items-center justify-between gap-3">
           <h2 className="masthead text-xl font-bold">
@@ -475,7 +472,7 @@ export function EditionsManager({
           <p
             role="status"
             aria-live="polite"
-            className="text-sm rounded-lg bg-paper px-3 py-2"
+            className="panel-note rounded-lg px-3 py-2 text-sm"
           >
             {msg}
           </p>
@@ -500,7 +497,7 @@ export function EditionsManager({
       </form>
 
       <div>
-        <h2 className="masthead text-xl font-bold mb-4">All issues</h2>
+        <h2 className="masthead editorial-rule mb-4 border-b pb-2 text-2xl font-bold">All issues</h2>
         {initialEditions.length === 0 ? (
           <p className="text-ink/60 text-sm">No issues yet. Create the first one!</p>
         ) : (
@@ -508,8 +505,7 @@ export function EditionsManager({
             {initialEditions.map((ed) => (
               <li
                 key={ed.id}
-                data-lg-static
-                className="lg-glass flex items-center gap-3 rounded-xl border border-ink/10 p-3"
+                className="panel flex items-center gap-3 rounded-xl p-3"
               >
                 <div className="w-10 h-10 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
                   <FileText size={20} className="text-brand" />
@@ -529,21 +525,26 @@ export function EditionsManager({
                   onClick={() => startEditing(ed)}
                   title="Edit issue"
                   aria-label={`Edit ${ed.title}`}
-                  className="p-2 rounded-lg hover:bg-ink/5"
+                  disabled={busy || analyzing}
+                  className="p-2 rounded-lg hover:bg-ink/5 disabled:opacity-40"
                 >
                   <Pencil size={18} />
                 </button>
                 <button
                   onClick={() => togglePublish(ed)}
                   title={ed.published ? 'Unpublish' : 'Publish'}
-                  className="p-2 rounded-lg hover:bg-ink/5"
+                  aria-label={`${ed.published ? 'Unpublish' : 'Publish'} ${ed.title}`}
+                  disabled={busy || analyzing}
+                  className="p-2 rounded-lg hover:bg-ink/5 disabled:opacity-40"
                 >
                   {ed.published ? <Eye size={18} /> : <EyeOff size={18} />}
                 </button>
                 <button
                   onClick={() => remove(ed)}
                   title="Delete"
-                  className="p-2 rounded-lg hover:bg-ink/10 text-ink"
+                  aria-label={`Delete ${ed.title}`}
+                  disabled={busy || analyzing}
+                  className="p-2 rounded-lg hover:bg-ink/10 text-ink disabled:opacity-40"
                 >
                   <Trash2 size={18} />
                 </button>

@@ -1,45 +1,49 @@
 import Image from 'next/image';
 import { Instagram } from 'lucide-react';
-import { Reveal } from '@/components/reveal';
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer relative z-10 mt-16 bg-night text-white">
-      <div className="mx-auto max-w-6xl px-4 py-12">
-        <Reveal as="div" delay={0}>
-          <h2 className="masthead text-3xl md:text-4xl font-bold text-white">
-            Highland Academy
-          </h2>
-          <p className="mt-6 text-paper/90">211 Highland Circle Dr, Portland, TN 37148</p>
-          <p className="mt-4 text-paper/90">p | 615-325-2036</p>
-          <Image
-            src="/brand/logo-white.png"
-            alt="Highland Academy logo"
-            width={567}
-            height={201}
-            className="h-16 md:h-20 w-auto mt-8"
-          />
-          <p className="mt-4 text-xs text-paper/60">
-            Student newspaper · &ldquo;Educating for a Higher Purpose&rdquo;
-          </p>
-          <a
-            href="https://www.instagram.com/highlandacademy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-6 inline-flex items-center gap-2 text-paper/90 hover:text-white transition-colors"
-            aria-label="Instagram"
-          >
-            <Instagram size={20} />
-            <span>Instagram</span>
-          </a>
-
-          <p className="mt-10 pt-6 border-t border-white/15 text-xs text-paper/60">
-            © {new Date().getFullYear()} Highland Academy. All rights reserved.
-          </p>
-          <p className="mt-3 text-xs text-paper/60">
+    <footer className="site-footer relative z-10 mt-16 bg-[#00713f] text-[#fffdf8]">
+      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-12">
+          <div className="grid gap-8 border-b border-white/20 pb-8 md:grid-cols-[1fr_auto] md:items-end">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#fffdf8]/70">
+                The Highlander · Student newspaper
+              </p>
+              <h2 className="masthead mt-2 text-3xl font-bold text-[#fffdf8] md:text-4xl">
+                Highland Academy
+              </h2>
+              <p className="mt-4 text-sm text-[#fffdf8]/85">
+                211 Highland Circle Dr, Portland, TN 37148
+                <span className="mx-2 text-[#fffdf8]/40">·</span>
+                615-325-2036
+              </p>
+              <a
+                href="https://www.instagram.com/highlandacademy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 text-sm text-[#fffdf8]/90 transition-colors hover:text-white"
+                aria-label="Instagram"
+              >
+                <Instagram size={18} />
+                <span>Instagram</span>
+              </a>
+            </div>
+            <Image
+              src="/brand/logo-white.png"
+              alt="Highland Academy logo"
+              width={567}
+              height={201}
+              className="h-14 w-auto opacity-90 md:h-16"
+            />
+          </div>
+          <div className="flex flex-col gap-2 pt-5 text-xs text-[#fffdf8]/70 sm:flex-row sm:items-center sm:justify-between">
+            <p>Student newspaper · &ldquo;Educating for a Higher Purpose&rdquo;</p>
+            <p>© {new Date().getFullYear()} Highland Academy. All rights reserved.</p>
+          </div>
+          <p className="mt-3 text-xs text-[#fffdf8]/60">
             Hecho por Luis David Arce Cortés.
           </p>
-        </Reveal>
       </div>
     </footer>
   );

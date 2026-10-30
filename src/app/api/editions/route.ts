@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
 import { getSessionUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -64,6 +64,14 @@ async function removeObjects(
   paths: string[],
 ): Promise<void> {
   if (paths.length === 0) return;
+  // Object cleanup is a server decision (the route already authorized the
+  // caller), so it uses the service role when configured: an editor replacing
+  // a PDF must not need blanket delete rights on the bucket.
+  const admin = getSupabaseAdminClient();
+  if (admin) {
+    await admin.storage.from(BUCKET).remove(paths);
+    return;
+  }
   await supabase.storage.from(BUCKET).remove(paths);
 }
 
@@ -104,6 +112,9 @@ export async function POST(req: NextRequest) {
   if (!title || !editionDate) {
     return NextResponse.json({ error: 'A title and a date are required.' }, { status: 400 });
   }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(editionDate) || Number.isNaN(Date.parse(`${editionDate}T00:00:00Z`))) {
+    return NextResponse.json({ error: 'Invalid edition date.' }, { status: 400 });
+  }
   if (!validPath(pdfPath, PDF_PATH_RE) || !validPath(coverPath, COVER_PATH_RE)) {
     return NextResponse.json(
       { error: 'The uploaded PDF or cover is missing. Please select the files again.' },
@@ -135,6 +146,7 @@ export async function POST(req: NextRequest) {
       cover_path: coverPath,
       cover_url: coverUrl,
       published: false,
+      created_by: user.id,
     })
     .select()
     .single();
@@ -178,8 +190,15 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.published === 'boolean') {
     const id = String(body.id ?? '');
     if (!id) return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
-    const { error: dbErr } = await supabase.from('editions').update({ published: body.published }).eq('id', id);
+    const { data, error: dbErr } = await supabase
+      .from('editions')
+      .update({ published: body.published })
+      .eq('id', id)
+      .select('id');
     if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    if (!data || data.length === 0) {
+      return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   }
 
@@ -202,6 +221,12 @@ export async function PATCH(req: NextRequest) {
     numberValue < 0
   ) {
     return NextResponse.json({ error: 'Invalid issue data.' }, { status: 400 });
+  }
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(editionDate) ||
+    Number.isNaN(Date.parse(`${editionDate}T00:00:00Z`))
+  ) {
+    return NextResponse.json({ error: 'Invalid edition date.' }, { status: 400 });
   }
 
   const { data: existing, error: findErr } = await supabase
@@ -244,12 +269,20 @@ export async function PATCH(req: NextRequest) {
     updates.cover_url = supabase.storage.from(BUCKET).getPublicUrl(coverPath).data.publicUrl;
   }
 
-  const { error: updateErr } = await supabase.from('editions').update(updates).eq('id', id);
+  const { data: updated, error: updateErr } = await supabase
+    .from('editions')
+    .update(updates)
+    .eq('id', id)
+    .select('id');
   if (updateErr) {
     // The freshly uploaded objects are ours (fresh stamp), so dropping them
     // keeps the 1 GB free quota clean when the row could not be saved.
     if (replaceFiles) await removeObjects(supabase, [pdfPath, coverPath]);
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+  if (!updated || updated.length === 0) {
+    if (replaceFiles) await removeObjects(supabase, [pdfPath, coverPath]);
+    return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
   }
 
   const oldPaths = replaceFiles
@@ -281,20 +314,24 @@ export async function DELETE(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
-  // Delete associated storage files
-  const { data: ed } = await supabase
+  // Delete the row FIRST. Files removed before a failed delete left a
+  // published issue whose PDF 404s in the reader (exactly the "The PDF could
+  // not be loaded" state supabase-server.ts warns about).
+  const { data: deleted, error: dbErr } = await supabase
     .from('editions')
-    .select('pdf_path, cover_path')
+    .delete()
     .eq('id', id)
-    .maybeSingle();
-  if (ed) {
-    const paths = [ed.pdf_path, ed.cover_path].filter(Boolean) as string[];
-    if (paths.length > 0) {
-      await supabase.storage.from(BUCKET).remove(paths);
-    }
+    .select('pdf_path, cover_path');
+  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+  if (!deleted || deleted.length === 0) {
+    return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
   }
 
-  const { error: dbErr } = await supabase.from('editions').delete().eq('id', id);
-  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+  // Best-effort: an orphaned object is far less harmful than a broken issue.
+  const paths = deleted
+    .flatMap((row) => [row.pdf_path, row.cover_path])
+    .filter((path): path is string => Boolean(path));
+  await removeObjects(supabase, paths);
+
   return NextResponse.json({ ok: true });
 }

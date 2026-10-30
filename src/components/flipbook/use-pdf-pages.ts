@@ -1,11 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import * as pdfjsLib from 'pdfjs-dist';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { renderPdfPage } from './pdf-render';
 
 export { renderPdfPage };
+
+export interface PdfPagesResult {
+  pages: string[];
+  texts: string[];
+  aspect: number | null;
+  error: string | null;
+  ready: boolean;
+  /** PDF page numbers pdfjs could not draw (they keep a visible placeholder). */
+  failedPages: number[];
+}
 
 /**
  * Renders every page of a PDF to JPEG dataURLs (single fast pass) and
@@ -17,12 +26,36 @@ export { renderPdfPage };
  * memoized book children identity while page-flip is mounted, which crashes
  * React ("insertBefore NotFoundError").
  */
-export function usePdfPages(doc: PDFDocumentProxy | null) {
+const pagesCache = new WeakMap<
+  PDFDocumentProxy,
+  { pages: string[]; texts: string[]; aspect: number | null; numPages: number }
+>();
+
+/**
+ * A page that pdfjs cannot draw still has to occupy its slot: dropping it
+ * shifted every following page and, when the last page failed, left `ready`
+ * false forever (the reader spun on "Rendering pages…" with no way out).
+ */
+function placeholderPage(pageNumber: number) {
+  const label = `Page ${pageNumber} could not be rendered`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="800">` +
+    `<rect width="600" height="800" fill="#f5f2ec"/>` +
+    `<text x="300" y="400" text-anchor="middle" font-family="Georgia, serif" font-size="22" fill="#8a8578">${label}</text>` +
+    `</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+export function usePdfPages(doc: PDFDocumentProxy | null): PdfPagesResult {
   const [pages, setPages] = useState<string[]>([]);
   const [texts, setTexts] = useState<string[]>([]);
   const [aspect, setAspect] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
+  // Pages that finished — successfully or not. `pages.length` cannot be used:
+  // a failed page would never fill its slot.
+  const [completed, setCompleted] = useState(0);
+  const [failedPages, setFailedPages] = useState<number[]>([]);
 
   useEffect(() => {
     if (!doc) {
@@ -31,6 +64,19 @@ export function usePdfPages(doc: PDFDocumentProxy | null) {
       setAspect(null);
       setError(null);
       setNumPages(0);
+      setCompleted(0);
+      setFailedPages([]);
+      return;
+    }
+    const cached = pagesCache.get(doc);
+    if (cached) {
+      setPages(cached.pages);
+      setTexts(cached.texts);
+      setAspect(cached.aspect);
+      setError(null);
+      setNumPages(cached.numPages);
+      setCompleted(cached.numPages);
+      setFailedPages([]);
       return;
     }
     let cancelled = false;
@@ -39,6 +85,8 @@ export function usePdfPages(doc: PDFDocumentProxy | null) {
     setAspect(null);
     setError(null);
     setNumPages(doc.numPages);
+    setCompleted(0);
+    setFailedPages([]);
 
     const idle = () =>
       new Promise<void>((resolve) => {
@@ -51,15 +99,23 @@ export function usePdfPages(doc: PDFDocumentProxy | null) {
 
     (async () => {
       for (let i = 1; i <= doc.numPages; i++) {
+        // The aspect ratio comes from the page geometry, not from whether the
+        // canvas could be drawn: a failing first page used to leave the book
+        // at 0×0 with no error at all.
+        if (i === 1) {
+          try {
+            const first = await doc.getPage(1);
+            const viewport = first.getViewport({ scale: 1 });
+            if (viewport.height > 0 && !cancelled) setAspect(viewport.width / viewport.height);
+          } catch {
+            // Keep the default aspect; the book still renders.
+          }
+        }
+
         // First page fixes the book's aspect ratio at scale 1.
         const r = await renderPdfPage(doc, i, { scale: i === 1 ? 1 : 1.4 });
         if (cancelled) return;
         if (r) {
-          if (i === 1) {
-            const page = await doc.getPage(1);
-            const vp = page.getViewport({ scale: 1 });
-            setAspect(vp.width / vp.height);
-          }
           setPages((cur) => {
             const next = [...cur];
             next[i - 1] = r.url;
@@ -70,7 +126,20 @@ export function usePdfPages(doc: PDFDocumentProxy | null) {
             next[i - 1] = r.text;
             return next;
           });
+        } else {
+          setPages((cur) => {
+            const next = [...cur];
+            next[i - 1] = placeholderPage(i);
+            return next;
+          });
+          setTexts((cur) => {
+            const next = [...cur];
+            next[i - 1] = '';
+            return next;
+          });
+          setFailedPages((cur) => (cur.includes(i) ? cur : [...cur, i]));
         }
+        setCompleted(i);
         await idle();
       }
     })().catch(() => {
@@ -82,10 +151,16 @@ export function usePdfPages(doc: PDFDocumentProxy | null) {
     };
   }, [doc]);
 
-  // All pages rendered? page-flip must mount once with the FULL set of
+  // All pages settled? page-flip must mount once with the FULL set of
   // children — adding pages while it is initialized crashes React
   // (insertBefore NotFoundError) because the library moves DOM nodes.
-  const ready = error ? pages.length > 0 : numPages > 0 && pages.length >= numPages;
+  const ready = error ? pages.length > 0 : numPages > 0 && completed >= numPages;
 
-  return { pages, texts, aspect, error, ready };
+  useEffect(() => {
+    if (doc && ready && !pagesCache.has(doc)) {
+      pagesCache.set(doc, { pages, texts, aspect, numPages });
+    }
+  }, [doc, ready, pages, texts, aspect, numPages]);
+
+  return { pages, texts, aspect, error, ready, failedPages };
 }

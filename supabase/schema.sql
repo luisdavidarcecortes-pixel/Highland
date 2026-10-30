@@ -186,17 +186,34 @@ drop policy if exists "public read newspaper" on storage.objects;
 create policy "public read newspaper" on storage.objects
   for select using (bucket_id = 'newspaper');
 
+-- `storage.foldername(name)` is text[] (the path segments), so it must be
+-- indexed before it is compared to a folder name: comparing the array itself
+-- to 'editions' never matches and makes the policy unusable.
 drop policy if exists "editors upload newspaper" on storage.objects;
 create policy "editors upload newspaper" on storage.objects
-  for insert to authenticated with check (bucket_id = 'newspaper');
+  for insert to authenticated
+  with check (
+    bucket_id = 'newspaper'
+    and (
+      public.is_admin()
+      or (storage.foldername(name))[1] in ('articles', 'covers', 'editions')
+    )
+  );
 
-drop policy if exists "editors update newspaper" on storage.objects;
-create policy "editors update newspaper" on storage.objects
-  for update to authenticated using (bucket_id = 'newspaper');
+-- Overwriting or deleting an object replaces/removes published content, which
+-- is an admin action everywhere else in the app (/api/editions DELETE). The
+-- server cleans up replaced files with the service role, so editors do not
+-- need these grants.
+drop policy if exists "admins update newspaper" on storage.objects;
+create policy "admins update newspaper" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'newspaper' and public.is_admin())
+  with check (bucket_id = 'newspaper' and public.is_admin());
 
-drop policy if exists "editors delete newspaper" on storage.objects;
-create policy "editors delete newspaper" on storage.objects
-  for delete to authenticated using (bucket_id = 'newspaper' and public.is_editor());
+drop policy if exists "admins delete newspaper" on storage.objects;
+create policy "admins delete newspaper" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'newspaper' and public.is_admin());
 
 -- 8) Sample data (optional): comment these lines out if you don't want them
 -- insert into public.editions (number, title, description, edition_date, school_year, pdf_url, published)

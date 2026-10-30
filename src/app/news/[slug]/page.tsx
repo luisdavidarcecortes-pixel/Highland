@@ -30,12 +30,13 @@ export default async function ArticlePage({ params }: Props) {
   const audio = article.audio_url && isAudioUrl(article.audio_url) ? article.audio_url : null;
 
   return (
-    <article className="public-page mx-auto max-w-3xl px-4 py-10">
-      <Link href="/news" className="text-sm text-ink/60 hover:text-ink">
+    <article className="public-page mx-auto max-w-3xl px-4 py-10 md:py-14">
+      <Link href="/news" className="text-sm font-semibold text-ink/60 hover:text-ink">
         ← All news
       </Link>
 
-      <h1 className="masthead text-3xl md:text-4xl font-bold mt-3">{article.title}</h1>
+      <p className="editorial-kicker mt-8">Around campus</p>
+      <h1 className="masthead mt-2 text-4xl font-bold leading-tight md:text-5xl">{article.title}</h1>
       <p className="text-sm text-ink/60 mt-2">
         {formatDateEs(article.created_at)}
       </p>

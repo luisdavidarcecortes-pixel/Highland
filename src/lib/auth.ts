@@ -33,20 +33,20 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     .select('*')
     .eq('id', user.id)
     .maybeSingle();
-  if (profile) {
-    return {
-      id: user.id,
-      email: (profile.email as string) ?? user.email ?? '',
-      role: (profile.role as Role) ?? 'editor',
-      fullName: (profile.full_name as string | null) ?? null,
-    }
+
+  if (!profile) {
+    // A valid login without a profiles row is not a member of the newspaper.
+    // Treating it as an editor (the old fallback) meant a revoked member whose
+    // profile had been deleted kept full editing rights.
+    console.warn('[auth] authenticated user without a profile row:', user.id);
+    return null;
   }
 
   return {
     id: user.id,
-    email: user.email ?? '',
-    role: 'editor',
-    fullName: null,
+    email: (profile.email as string) ?? user.email ?? '',
+    role: (profile.role as Role) ?? 'editor',
+    fullName: (profile.full_name as string | null) ?? null,
   };
 }
 

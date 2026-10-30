@@ -15,18 +15,18 @@ export default async function HomePage() {
   const latest = editions[0];
 
   return (
-    <div className="public-page mx-auto max-w-7xl px-4 py-8 sm:px-6 md:py-12">
+    <div className="public-page mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16">
       <Reveal as="section" className="mb-8 md:mb-12">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="editorial-rule mb-5 flex items-center gap-3 border-b pb-3">
           <span className="h-px w-8 bg-brand" />
-          <p className="text-xs uppercase tracking-[0.22em] text-accent font-semibold">
+          <p className="editorial-kicker">
             The Highlander · Student newspaper
           </p>
         </div>
-        <h1 className="masthead max-w-3xl text-3xl sm:text-4xl md:text-5xl font-bold leading-tight">
+        <h1 className="masthead max-w-4xl text-4xl font-bold leading-[1.04] sm:text-5xl md:text-6xl">
           Stories from the heart of campus.
         </h1>
-        <p className="mt-3 max-w-2xl text-ink/70 leading-relaxed">
+        <p className="mt-4 max-w-2xl text-base leading-relaxed text-ink/70 md:text-lg">
           Student voices, school news, and every new issue of The Highlander.
         </p>
       </Reveal>
@@ -34,10 +34,8 @@ export default async function HomePage() {
       {latest && (
         <Reveal as="div" delay={0}>
           <section
-            data-lg-surface
-            className="lg-glass relative isolate grid md:grid-cols-[minmax(240px,0.8fr)_1.2fr] gap-8 lg:gap-14 items-center overflow-hidden rounded-3xl border border-ink/10 p-5 sm:p-7 md:p-9 lg:p-12"
+            className="public-feature relative isolate grid items-center gap-8 overflow-hidden rounded-2xl border p-5 sm:p-7 md:grid-cols-[minmax(240px,0.8fr)_1.2fr] md:p-9 lg:gap-14 lg:p-12"
           >
-            <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-brand/10 via-transparent to-accent/5" />
             <Link
               href={`/read/${latest.id}`}
               className="group mx-auto block w-full max-w-[340px] rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
@@ -46,15 +44,13 @@ export default async function HomePage() {
                 coverUrl={latest.cover_url}
                 pdfUrl={latest.pdf_url}
                 alt={`${issueLabel(latest.number) ?? 'Issue'} cover`}
-                className="relative aspect-[3/4] overflow-hidden rounded-xl shadow-page transition-transform duration-500 group-hover:scale-[1.02]"
+                className="relative aspect-[3/4] overflow-hidden rounded-xl shadow-card transition-transform duration-300 group-hover:scale-[1.02]"
                 sizes="(max-width: 768px) 80vw, 340px"
               />
             </Link>
             <div className="py-2 md:py-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-accent font-bold">
-                Latest issue
-              </p>
-              <h2 className="masthead text-3xl sm:text-4xl lg:text-5xl font-bold mt-3 leading-tight">
+              <p className="editorial-kicker">Latest issue</p>
+              <h2 className="masthead mt-3 text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
                 {latest.title}
               </h2>
               {latest.description && (
@@ -62,9 +58,9 @@ export default async function HomePage() {
                   {latest.description}
                 </p>
               )}
-              <div className="flex flex-wrap gap-x-5 gap-y-2 mt-5 text-sm text-ink/60">
+              <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink/60">
                 {issueLabel(latest.number) && (
-                  <span className="font-semibold text-paper">{issueLabel(latest.number)}</span>
+                  <span className="font-semibold text-ink">{issueLabel(latest.number)}</span>
                 )}
                 <span className="inline-flex items-center gap-1.5">
                   <CalendarDays size={15} aria-hidden />
@@ -72,7 +68,7 @@ export default async function HomePage() {
                 </span>
                 <span>School year {latest.school_year}</span>
               </div>
-              <div className="flex flex-wrap gap-3 mt-7">
+              <div className="mt-7 flex flex-wrap gap-3">
                 <Link
                   href={`/read/${latest.id}`}
                   className="inline-flex items-center gap-2 rounded-full bg-brand text-paper px-6 py-3 font-semibold hover:bg-brand-dark transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -91,10 +87,10 @@ export default async function HomePage() {
         </Reveal>
       )}
 
-      <Reveal as="section" delay={100} className="mt-14 md:mt-20">
+      <Reveal as="section" delay={100} className="mt-16 border-t border-ink/15 pt-8 md:mt-20 md:pt-10">
         <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-accent font-semibold mb-2">
+            <p className="editorial-kicker mb-2">
               Around campus
             </p>
             <div className="flex items-center gap-2">
@@ -125,10 +121,10 @@ export default async function HomePage() {
       </Reveal>
 
       {editions.length > 1 && (
-        <Reveal as="section" delay={120} className="mt-14 md:mt-20">
+        <Reveal as="section" delay={120} className="mt-16 border-t border-ink/15 pt-8 md:mt-20 md:pt-10">
           <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-accent font-semibold mb-2">
+              <p className="editorial-kicker mb-2">
                 From the archives
               </p>
               <h2 className="masthead text-2xl md:text-3xl font-bold">More issues</h2>

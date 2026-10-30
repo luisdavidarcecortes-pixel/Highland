@@ -19,6 +19,7 @@ import {
   Filmstrip,
 } from './toolbar';
 import { X, ZoomIn, ZoomOut } from 'lucide-react';
+import { SlowVideo } from '@/components/slow-video';
 
 interface FlipbookProps {
   pdfUrl: string;
@@ -47,8 +48,8 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   const [query, setQuery] = useState('');
   const [playing, setPlaying] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [flipping, setFlipping] = useState(false); // live spine: a turn is in progress
-  const [jumpVeil, setJumpVeil] = useState(false); // ink veil on distant jumps (>2 pages)
+
+  const [jumpVeil, setJumpVeil] = useState(false); // white veil on distant jumps (>2 pages)
   const veilTimerRef = useRef<number | null>(null);
   // Bottom page strip: persisted preference, loaded lazily on the first
   // client render so it never flashes open/closed and never persists the
@@ -87,9 +88,16 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     if (!ready || restoredRef.current) return;
     restoredRef.current = true;
     const fromUrl = initialPageRef.current;
-    const saved = editionId
-      ? parseInt(localStorage.getItem(LAST_PAGE_KEY(editionId)) ?? '', 10)
-      : NaN;
+    // Storage can throw (private mode, storage blocked in an iframe): a
+    // missing "remembered page" must never break the reader.
+    let saved = NaN;
+    if (editionId) {
+      try {
+        saved = parseInt(localStorage.getItem(LAST_PAGE_KEY(editionId)) ?? '', 10);
+      } catch {
+        saved = NaN;
+      }
+    }
     const target = fromUrl > 1 ? fromUrl : !Number.isNaN(saved) && saved >= 1 ? saved : 1;
     if (target > 1) {
       initialPageRef.current = target;
@@ -138,7 +146,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       if (Math.abs(clamped - pageRef.current) > 2) {
         setJumpVeil(true);
         if (veilTimerRef.current) window.clearTimeout(veilTimerRef.current);
-        veilTimerRef.current = window.setTimeout(() => setJumpVeil(false), 260);
+        veilTimerRef.current = window.setTimeout(() => setJumpVeil(false), 420);
       }
       setPage(clamped);
       // Child index = PDF page - 1 in both orientations (showCover: child 0
@@ -238,10 +246,11 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   // ---- Page size -------------------------------------------------------------
   const getPageWidth = () => {
     if (!aspect || w <= 0 || h <= 0) return 0;
-    const pad = 24; // matches the p-3 wrapper
+    const pageTopInset = 56; // keep the page clear of the toolbar
+    const pageBottomInset = strip && pages.length > 2 ? 96 : 12;
     // In landscape the book is two pages side by side; each page gets half the width.
-    const maxPageW = (isPortrait ? w - pad : (w - pad) / 2) * zoom;
-    const maxPageH = (h - pad) * zoom;
+    const maxPageW = (isPortrait ? w - 24 : (w - 24) / 2) * zoom;
+    const maxPageH = (h - pageTopInset - pageBottomInset) * zoom;
     // The binding constraint decides: too wide -> shrink to fit height, too tall -> shrink to fit width.
     const fitted = Math.min(maxPageW, maxPageH * aspect);
     return Math.max(180, Math.round(fitted));
@@ -251,11 +260,20 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   const pageW = getPageWidth();
   const pageH = aspect ? Math.max(240, Math.round(pageW / aspect)) : 0;
 
+  const navLockRef = useRef(false);
+  const flipWatchRef = useRef<number | null>(null);
+  const [bookEpoch, setBookEpoch] = useState(0);
+
   const onFlip = useCallback(
     (e: { data: number }) => {
       // Child index N = PDF page N + 1 in both orientations (no bookend
       // ghosts; the cover is child 0).
       setPage(e.data + 1);
+      navLockRef.current = false;
+      if (flipWatchRef.current !== null) {
+        window.clearTimeout(flipWatchRef.current);
+        flipWatchRef.current = null;
+      }
       if (soundRef.current) playFlipSound();
     },
     []
@@ -313,13 +331,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   // 1) Nav lock: ignore navigation while a flip animation is running.
   // 2) Watchdog: if "flipping" outlives flippingTime + margin, remount the
   //    book cleanly (bump bookEpoch -> new key) — onInit restores the page.
-  const navLockRef = useRef(false);
-  const flipWatchRef = useRef<number | null>(null);
-  const [bookEpoch, setBookEpoch] = useState(0);
-
   const onChangeState = useCallback((e: { data: string }) => {
-    // Lomo vivo: deepen the spine shading while a sheet is in motion.
-    setFlipping(e?.data === 'flipping' || e?.data === 'user_fold');
     if (e?.data === 'read') {
       navLockRef.current = false;
       if (flipWatchRef.current !== null) {
@@ -354,8 +366,34 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      // The zoom overlay is modal: only it reacts while it is open, so the
+      // book cannot silently flip behind the page the reader is inspecting.
+      if (zoomPage) {
+        if (ev.key === 'Escape') closeZoom();
+        else if (ev.key === '+' || ev.key === '=') {
+          setZoomScale((s) => Math.min(4, +(s + 0.25).toFixed(2)));
+        } else if (ev.key === '-' || ev.key === '_') {
+          setZoomScale((s) => Math.max(0.5, +(s - 0.25).toFixed(2)));
+        }
+        return;
+      }
+
       const el = ev.target as HTMLElement | null;
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+      const isTyping =
+        !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+
+      // Escape closes a panel even when the focus is inside the search field:
+      // the typing guard below used to swallow it, trapping the reader in the
+      // search box with no keyboard way out.
+      if (ev.key === 'Escape') {
+        if (searchOpen) setSearchOpen(false);
+        else if (tocOpen) setTocOpen(false);
+        else if (thumbs) setThumbs(false);
+        return;
+      }
+
+      if (isTyping) return;
+
       switch (ev.key) {
         case 'ArrowLeft':
           prev();
@@ -399,12 +437,6 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         case 'P':
           setPlaying((v) => !v);
           break;
-        case 'Escape':
-          if (zoomPage) closeZoom();
-          else if (searchOpen) setSearchOpen(false);
-          else if (tocOpen) setTocOpen(false);
-          else if (thumbs) setThumbs(false);
-          break;
       }
     };
     window.addEventListener('keydown', onKey);
@@ -446,34 +478,16 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     <MotionConfig reducedMotion="user">
     <div
       id="fb-wrap"
-      data-lg-surface
-      className="lg-glass relative w-full h-[80vh] min-h-[440px] rounded-2xl overflow-hidden select-none"
+      role="region"
+      aria-label={`${title} — issue reader`}
+      className="relative w-full h-[80vh] min-h-[440px] rounded-2xl overflow-hidden select-none border border-ink/15 bg-transparent"
     >
-      {/* Soft vignette + stronger spine shadow */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 z-[5]"
-        style={{ background: 'radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%)' }}
-      />
-
-      {/* Keep the central spine overlay out of the way of the turning sheet. */}
-      <motion.div
-        aria-hidden
-        className="pointer-events-none absolute top-4 bottom-4 left-1/2 w-8 z-[6]"
-        style={{
-          x: '-50%',
-          background:
-            'linear-gradient(90deg, transparent, rgba(0,0,0,0.28) 45%, rgba(0,0,0,0.4) 50%, rgba(0,0,0,0.28) 55%, transparent)',
-        }}
-        initial={false}
-        animate={{ opacity: flipping ? 0 : 0.12, scaleX: 1 }}
-        transition={{ duration: 0.35 }}
-      />
-
+      <SlowVideo src="/bg/595873_Drone_Landscape_Nature_1280x720.mp4" />
+      <div className="absolute inset-0 z-0 bg-black/45" />
       {/* Reading progress hairline across the top of the reader */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 left-0 right-0 z-[6] h-[3px] bg-paper/10"
+        className="pointer-events-none absolute top-0 left-0 right-0 z-[6] h-[3px] bg-ink/10"
       >
         <motion.div
           className="h-full bg-accent origin-left"
@@ -483,13 +497,13 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         />
       </div>
 
-      {/* Ink veil for distant jumps */}
+      {/* White veil for distant jumps */}
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute inset-0 z-[7] bg-ink"
+        className="pointer-events-none absolute inset-0 z-[7] bg-white"
         initial={false}
-        animate={{ opacity: jumpVeil ? 0.5 : 0 }}
-        transition={{ duration: 0.24 }}
+        animate={{ opacity: jumpVeil ? 0.35 : 0 }}
+        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
       />
 
       <Toolbar
@@ -522,13 +536,15 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         onFullscreen={toggleFullscreen}
       />
 
-      <div className="w-full h-full flex items-center justify-center p-3">
-        {error && <p className="text-paper/80">{error}</p>}
+      <div
+        className={`w-full h-full flex items-center justify-center px-3 pt-14 ${
+          strip && pages.length > 2 ? 'pb-24' : 'pb-3'
+        }`}
+      >
+        {error && <p className="text-ink/70">{error}</p>}
         {!error && !ready && (
-          // Solid backing instead of its own filter: a backdrop-filter nested in
-          // the glass visor would only re-blur the tint it already sits on.
-          <div className="text-center w-72 rounded-2xl border border-paper/10 bg-ink/30 px-6 py-5">
-            <p className="text-paper/70 animate-pulse mb-2">
+          <div className="text-center w-72 rounded-2xl border border-ink/15 bg-white px-6 py-5">
+            <p className="text-ink/70 animate-pulse mb-2">
               {progress !== null && progress < 1
                 ? `Downloading… ${Math.round(progress * 100)}%`
                 : loading || pages.length === 0
@@ -536,7 +552,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
                   : `Rendering pages… ${pages.length}/${doc?.numPages ?? '?'}`}
             </p>
             {progress !== null && progress < 1 && (
-              <div className="h-1.5 rounded-full bg-paper/15 overflow-hidden">
+              <div className="h-1.5 rounded-full bg-ink/10 overflow-hidden">
                 <div
                   className="h-full bg-accent rounded-full transition-[width] duration-300"
                   style={{ width: `${Math.round(progress * 100)}%` }}
@@ -549,8 +565,8 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           <motion.div
             onDoubleClick={onBookDoubleClick}
             initial={false}
-            animate={mounted ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 0.965 }}
-            transition={{ opacity: { duration: 0.6 }, scale: easeOutQuint }}
+            animate={mounted ? { opacity: 1 } : { opacity: 0 }}
+            transition={{ opacity: { duration: 0.4 } }}
             style={{ transformOrigin: '50% 100%' }}
           >
           <HTMLFlipBook
@@ -576,7 +592,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
             showCover={true}
             usePortrait={isPortrait}
             drawShadow
-            flippingTime={600}
+            flippingTime={750}
             maxShadowOpacity={0.5}
             swipeDistance={20}
             onFlip={onFlip}
@@ -613,7 +629,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0, transition: springSoft }}
           exit={{ opacity: 0, y: 40, transition: { duration: 0.22, ease: 'easeIn' } }}
-          className="absolute inset-0 z-20 bg-ink/95 pt-14 pb-4 px-4 overflow-auto nice-scroll"
+          className="absolute inset-0 z-20 bg-[#ffffff] pt-14 pb-4 px-4 overflow-auto nice-scroll"
         >
           <ThumbsCloseButton onClick={() => setThumbs(false)} />
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 max-w-4xl mx-auto">
@@ -624,7 +640,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
                   alt={`Thumbnail ${i + 1}`}
                   className="w-full rounded shadow group-hover:ring-2 group-hover:ring-accent"
                 />
-                <p className="text-paper/70 text-xs text-center mt-1">{i + 1}</p>
+                <p className="text-ink/60 text-xs text-center mt-1">{i + 1}</p>
               </button>
             ))}
           </div>
@@ -647,29 +663,36 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1, transition: { duration: 0.22 } }}
           exit={{ opacity: 0, transition: { duration: 0.18 } }}
-          className="absolute inset-0 z-30 bg-ink/97 flex items-center justify-center touch-none"
-          onDoubleClick={() => closeZoom()}
+          className="absolute inset-0 z-30 bg-[#ffffff] flex items-center justify-center touch-none"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Page ${zoomPage.n} zoomed`}
+          onDoubleClick={(e) => {
+            // Only the empty backdrop closes; a double-click on the page must
+            // reach the zoom toggle below (it used to bubble up and close).
+            if (e.target === e.currentTarget) closeZoom();
+          }}
         >
           <div className="absolute top-2 right-2 flex items-center gap-1">
             <button
-              className="p-2 rounded-lg text-paper/90 hover:bg-paper/15"
+              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
               onClick={() => setZoomScale((s) => Math.min(4, +(s + 0.5).toFixed(1)))}
               aria-label="Zoom in"
             >
               <ZoomIn size={18} />
             </button>
-            <span className="text-paper/70 text-xs tabular-nums w-10 text-center">
+            <span className="text-ink/60 text-xs tabular-nums w-10 text-center">
               {Math.round(zoomScale * 100)}%
             </span>
             <button
-              className="p-2 rounded-lg text-paper/90 hover:bg-paper/15"
+              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
               onClick={() => setZoomScale((s) => Math.max(0.5, +(s - 0.5).toFixed(1)))}
               aria-label="Zoom out"
             >
               <ZoomOut size={18} />
             </button>
             <button
-              className="p-2 rounded-lg text-paper/90 hover:bg-paper/15"
+              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
               onClick={closeZoom}
               aria-label="Close zoom"
             >
@@ -679,7 +702,10 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           <div
             className="overflow-auto nice-scroll max-w-full max-h-full p-4"
             style={{ cursor: zoomScale > 1 ? 'grab' : 'default' }}
-            onDoubleClick={() => setZoomScale((s) => (s > 1 ? 1 : 2))}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setZoomScale((s) => (s > 1 ? 1 : 2));
+            }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -699,9 +725,9 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
             />
           </div>
           {zoomLoading && (
-            <p className="absolute bottom-4 text-paper/70 text-xs animate-pulse">Loading hi-res…</p>
+            <p className="absolute bottom-4 text-ink/60 text-xs animate-pulse">Loading hi-res…</p>
           )}
-          <p className="absolute top-3 left-3 text-paper/60 text-xs">
+          <p className="absolute top-3 left-3 text-ink/50 text-xs">
             Page {zoomPage.n} · double-click to toggle zoom · Ctrl+scroll to zoom · Esc to close
           </p>
         </motion.div>
