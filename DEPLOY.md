@@ -43,11 +43,12 @@ En **Project → Settings → Environment Variables**, añade estas cinco (para
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → API → Project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API → la clave *publishable* / *anon* |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API → la clave *secret* / *service_role* (solo servidor, nunca `NEXT_PUBLIC_`) |
-| `NEXT_PUBLIC_SITE_URL` | La URL pública del proyecto, p. ej. `https://highlander.vercel.app` |
 | `GEMINI_API_KEY` | https://aistudio.google.com/apikey (gratis; sin ella, el análisis del PDF usa la heurística local) |
+| `NEXT_PUBLIC_SITE_URL` | Opcional en Vercel: si no la pones, se usa el dominio que Vercel asigna al proyecto. Ponla cuando uses un dominio propio |
 
-> `NEXT_PUBLIC_SITE_URL` es **obligatoria** en producción: sin ella la web no
-> arranca (es lo que evita publicar enlaces canónicos con `localhost`).
+> Las tres primeras son **imprescindibles**: sin URL y clave de Supabase la web
+> arranca en modo demostración (contenido de ejemplo), y sin la clave de
+> servicio los editores no pueden publicar.
 
 Pulsa **Deploy** otra vez para que las variables se apliquen.
 
