@@ -12,7 +12,8 @@ Guía paso a paso. Tarda unos 30 minutos la primera vez.
   cada instancia vuelve a preparar el PDF en vez de reutilizar las páginas ya
   guardadas.
 - Una **cuenta de Vercel** (gratis: https://vercel.com).
-- El repositorio de GitHub: `github.com/luisdavidarcecortes-pixel/Highlander`.
+- El repositorio de GitHub: `github.com/luisdavidarcecortes-pixel/Highland`
+  (sin «er»: **Highland**, no «Highlander»).
 
 ## 2. Subir el código
 
@@ -28,7 +29,11 @@ git push origin release-v1
 ## 3. Crear el proyecto en Vercel
 
 1. Entra en https://vercel.com → **Add New… → Project**.
-2. Elige **Import** el repositorio `luisdavidarcecortes-pixel/Highlander`.
+2. Elige **Import** el repositorio `luisdavidarcecortes-pixel/Highland`
+   (busca «Highland»; no existe ningún «Highlander»).
+   Si no aparece en la lista, pulsa **Adjust GitHub App Permissions** (o
+   **Configure GitHub App**) y dale acceso a ese repositorio; es público, así
+   que basta con autorizar la instalación de Vercel en tu cuenta.
 3. Vercel detecta Next.js solo: no hay que cambiar nada del *Framework
    Preset* ni del *Build Command*.
 4. **Antes de desplegar**, abre **Settings → Git → Production Branch** y elige
