@@ -5,15 +5,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        paper: '#eaf4f5',
-        ink: '#171e55',
-        night: '#171e55',
+        paper: '#f6f3eb',
+        ink: '#20372e',
+        night: '#10251e',
         brand: {
-          DEFAULT: '#2f39a9',
-          dark: '#252f86',
-          light: '#49a4bb',
+          DEFAULT: '#166344',
+          dark: '#104b34',
+          light: '#84bea0',
         },
-        accent: '#00713f',
+        accent: '#9c4937',
       },
       fontFamily: {
         display: ['var(--font-poppins)', 'system-ui', 'sans-serif'],

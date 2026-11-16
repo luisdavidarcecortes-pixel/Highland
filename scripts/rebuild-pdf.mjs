@@ -1,5 +1,5 @@
 // One-off: rebuild the March 2025 issue PDF from the 8 page images (cover already exists).
-import { Jimp } from 'jimp';
+import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { mkdirSync, writeFileSync } from 'node:fs';
 
@@ -12,8 +12,7 @@ pdf.setTitle('The Highlander — Vol. 3, Issue 5 — 24 March 2025');
 pdf.setAuthor('Highland Academy');
 
 for (let n = 1; n <= 8; n++) {
-  const img = await Jimp.read(`${SRC_DIR}/${n}.png`);
-  const jpeg = await img.getBuffer('image/jpeg', { quality: 88 });
+  const jpeg = await sharp(`${SRC_DIR}/${n}.png`).jpeg({ quality: 88 }).toBuffer();
   const embedded = await pdf.embedJpg(jpeg);
   const page = pdf.addPage([A4.w, A4.h]);
   page.drawImage(embedded, { x: 0, y: 0, width: A4.w, height: A4.h });

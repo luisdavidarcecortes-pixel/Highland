@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { CookieOptions } from '@supabase/ssr';
+import { boundedFetch } from './lib/bounded-fetch';
+import { withDeadline } from './lib/deadline';
 
 /**
  * Refresca la sesión de Supabase en cada petición y protege /admin.
@@ -14,6 +16,7 @@ export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(url, anonKey, {
+    global: { fetch: boundedFetch },
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -28,15 +31,30 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user;
+  try {
+    const result = await withDeadline(supabase.auth.getUser());
+    if (result.error && (!result.error.status || result.error.status >= 500 || result.error.status === 429)) throw result.error;
+    user = result.data.user;
+  } catch {
+    if (request.nextUrl.pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Account services are temporarily unavailable. Please retry.' }, { status: 503, headers: { 'Retry-After': '5' } });
+    }
+    // Render the login's retry message rather than an unhandled middleware error.
+    const retryUrl = request.nextUrl.clone();
+    retryUrl.pathname = '/admin/login';
+    retryUrl.search = '?error=unavailable';
+    return NextResponse.rewrite(retryUrl, { status: 503, headers: { 'Retry-After': '5' } });
+  }
 
   const { pathname } = request.nextUrl;
   if (!user && pathname.startsWith('/admin') && pathname !== '/admin/login') {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = '/admin/login';
-    return NextResponse.redirect(loginUrl);
+    loginUrl.search = '';
+    const redirect = NextResponse.redirect(loginUrl);
+    response.cookies.getAll().forEach(cookie => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   return response;
@@ -52,5 +70,8 @@ export const config = {
     '/api/articles/:path*',
     '/api/team/:path*',
     '/api/upload-image',
+    '/api/cleanup',
+    '/api/session',
+    '/api/account',
   ],
 };

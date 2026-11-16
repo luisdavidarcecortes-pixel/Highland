@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import Link from 'next/link';
+import { Link } from '@/components/page-transitions';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getArticleBySlug, getPublishedArticles } from '@/lib/data-articles';
@@ -9,11 +9,12 @@ import { absoluteUrl } from '@/lib/site';
 export const dynamic = 'force-dynamic';
 
 interface Props {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const article = await getArticleBySlug(params.slug);
+  const routeParams = await params;
+  const article = await getArticleBySlug(routeParams.slug);
   if (!article || !article.published) {
     return { title: 'Article not found', robots: { index: false, follow: false } };
   }
@@ -42,7 +43,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ArticlePage({ params }: Props) {
-  const article = await getArticleBySlug(params.slug);
+  const routeParams = await params;
+  const article = await getArticleBySlug(routeParams.slug);
   // Drafts are unreachable from the public site even if the database policy
   // ever regresses and returns them: the page itself is the last guard.
   if (!article || !article.published) notFound();
@@ -78,7 +80,10 @@ export default async function ArticlePage({ params }: Props) {
       <h1 className="masthead mt-2 text-4xl font-bold leading-tight md:text-5xl">{article.title}</h1>
       <p className="text-sm text-ink/60 mt-2">
         {formatDateEs(article.created_at)}
+        <span className="mx-2" aria-hidden>·</span>{Math.max(1, Math.ceil(article.body.split(/\s+/).length / 200))} min read
       </p>
+
+      {article.excerpt && <p className="article-deck mt-5 border-b border-ink/15 pb-6">{article.excerpt}</p>}
 
       {article.image_url && (
         <div className="relative aspect-video mt-6 rounded-xl overflow-hidden shadow-card">
@@ -86,7 +91,7 @@ export default async function ArticlePage({ params }: Props) {
         </div>
       )}
 
-      <div className="prose prose-gray max-w-none mt-6 whitespace-pre-line leading-relaxed">
+      <div className="prose prose-gray max-w-none mt-8 whitespace-pre-line leading-relaxed">
         {article.body}
       </div>
 

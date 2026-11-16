@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getPublishedArticles } from '@/lib/data-articles';
 import { ArticleCard } from '@/components/cards';
+import { Newspaper } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
   title: 'News',
   description: 'School news between issues.',
   alternates: { canonical: '/news' },
+  openGraph: { url: '/news' },
 };
 
 export default async function NewsPage() {
@@ -24,7 +26,7 @@ export default async function NewsPage() {
       </p>
 
       {articles.length === 0 ? (
-        <p className="text-ink/60">No news published yet.</p>
+        <div className="public-card rounded-2xl border border-ink/10 p-10 text-center md:p-16"><Newspaper size={36} strokeWidth={1.3} className="mx-auto text-brand" aria-hidden /><h2 className="masthead mt-5 text-2xl font-bold">Good stories are on their way</h2><p className="mx-auto mt-3 max-w-md text-sm text-ink/60">Campus updates, student voices and community news will appear here as the team publishes them.</p></div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {articles.map((a) => (

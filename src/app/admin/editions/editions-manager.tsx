@@ -1,15 +1,21 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Upload, Trash2, Eye, EyeOff, FileText, Wand2, Pencil, X } from 'lucide-react';
+import { Upload, Trash2, Eye, EyeOff, FileText, Wand2, Pencil, X, Pause } from 'lucide-react';
 import type { Edition } from '@/lib/types';
-import { formatMonthEs, issueLabel, slugify } from '@/lib/utils';
+import { formatMonthEs, issueLabel } from '@/lib/utils';
 import { isDemoMode } from '@/lib/demo';
 import { analyzePdf } from '@/lib/analyze-pdf';
-import { removeObjects, uploadObject } from '@/lib/storage-upload';
+import { removeObjects } from '@/lib/storage-upload';
+import { createEditionUpload, completedEditionUploads, transferEditionFiles, type EditionUploadAttempt } from '@/lib/edition-upload';
+import { getSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { requestJson } from '@/lib/request-json';
+import { ContentFilter } from '@/components/content-filter';
+import { PdfPageOrder } from './pdf-page-order';
 
 type EditionField = 'number' | 'title' | 'description' | 'edition_date' | 'school_year';
+type PageOrderMode = 'automatic' | 'manual';
 
 interface AnalyzedEdition {
   number?: number | null;
@@ -22,13 +28,23 @@ interface AnalyzedEdition {
 
 export function EditionsManager({
   initialEditions,
+  demo,
+  admin,
+  currentUserId,
 }: {
   initialEditions: Edition[];
   demo: boolean;
+  admin: boolean;
+  currentUserId: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const visible = initialEditions.filter(edition => edition.title.toLowerCase().includes(query.toLowerCase()) && (status === 'all' || edition.published === (status === 'published')));
   const [msg, setMsg] = useState<string | null>(null);
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [orderMode, setOrderMode] = useState<PageOrderMode>('automatic');
   const [file, setFile] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
@@ -37,6 +53,21 @@ export function EditionsManager({
   const analysisRunRef = useRef(0);
   // Upload progress (0-100) while sending the PDF; null when idle.
   const [progress, setProgress] = useState<number | null>(null);
+  const [transferStatus, setTransferStatus] = useState('');
+  const [transferBytes, setTransferBytes] = useState<{ sent: number; total: number } | null>(null);
+  const uploadAttempt = useRef<EditionUploadAttempt | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  const [uploadStage, setUploadStage] = useState<'idle' | 'uploading' | 'saving'>('idle');
+  useEffect(() => () => {
+    uploadController.current?.abort();
+    if (uploadAttempt.current) void removeObjects(completedEditionUploads(uploadAttempt.current));
+  }, []);
+  function discardPendingUpload() {
+    uploadController.current?.abort();
+    if (uploadAttempt.current) void removeObjects(completedEditionUploads(uploadAttempt.current));
+    uploadAttempt.current = null;
+    setProgress(null); setTransferBytes(null); setTransferStatus('');
+  }
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     number: '',
@@ -52,12 +83,14 @@ export function EditionsManager({
       : `${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}`;
 
   function startEditing(ed: Edition) {
+    discardPendingUpload();
     // Any analysis still running belongs to the previous form: cancel it so it
     // cannot fill this edition's fields or attach its PDF as a replacement.
     analysisRunRef.current += 1;
     setAnalyzing(false);
     manuallyEditedRef.current.clear();
     setEditingEdition(ed);
+    setSourceFile(null);
     setFile(null);
     setCover(null);
     setForm({
@@ -72,10 +105,12 @@ export function EditionsManager({
   }
 
   function cancelEditing() {
+    discardPendingUpload();
     manuallyEditedRef.current.clear();
     analysisRunRef.current += 1;
     setAnalyzing(false);
     setEditingEdition(null);
+    setSourceFile(null);
     setFile(null);
     setCover(null);
     setForm({
@@ -89,17 +124,22 @@ export function EditionsManager({
     setMsg(null);
   }
 
-  /** Extract local PDF metadata, then ask Gemini to fill or improve the fields. */
-  async function handlePdfChange(f: File | null) {
-    const runId = ++analysisRunRef.current;
-    setFile(f);
-    if (!f) {
-      setCover(null);
-      setAnalyzing(false);
+  function handlePdfChange(f: File | null, mode = orderMode, resetMetadata = true) {
+    discardPendingUpload();
+    analysisRunRef.current += 1;
+    setSourceFile(null);
+    setFile(null);
+    setCover(null);
+    setAnalyzing(false);
+    setMsg(null);
+    if (!f) return;
+    if (f.size > 50 * 1024 * 1024) {
+      if (pdfInputRef.current) pdfInputRef.current.value = '';
+      setMsg('The PDF is larger than 50 MB. Export a smaller copy and try again.');
       return;
     }
-    setCover(null);
-    if (!editingEdition) {
+    setSourceFile(f);
+    if (resetMetadata && !editingEdition) {
       setForm((prev) => ({
         ...prev,
         number: manuallyEditedRef.current.has('number') ? prev.number : '',
@@ -111,16 +151,25 @@ export function EditionsManager({
         school_year: manuallyEditedRef.current.has('school_year') ? prev.school_year : '',
       }));
     }
+    if (mode === 'automatic') void preparePdf(f);
+  }
+
+  async function preparePdf(f: File, manualOrder?: number[]) {
+    const runId = ++analysisRunRef.current;
     setAnalyzing(true);
-    setMsg('Checking printed page numbers and preparing the first-page cover…');
+    setMsg(manualOrder ? 'Applying your page order and preparing the cover…' : 'Checking printed page numbers and preparing the first-page cover…');
     try {
-      const a = await analyzePdf(f, (message) => {
+      const onProgress = (message: string) => {
         if (runId === analysisRunRef.current) setMsg(message);
-      });
+      };
+      const a = manualOrder ? await analyzePdf(f, onProgress, manualOrder) : await analyzePdf(f, onProgress);
       if (runId !== analysisRunRef.current) return;
+      if (a.file.size > 50 * 1024 * 1024) throw new Error('The reordered PDF is larger than 50 MB. Export a smaller copy and try again.');
       setFile(a.file);
       setCover(a.cover);
-      const orderStatus = a.pageOrderChanged
+      const orderStatus = manualOrder
+        ? `Order confirmed for ${a.pageCount} pages.`
+        : a.pageOrderChanged
         ? `Reordered ${a.pageCount} pages by their printed numbers.`
         : `Verified the printed-number order of all ${a.pageCount} pages.`;
       setForm((prev) => ({
@@ -142,6 +191,11 @@ export function EditionsManager({
             : a.schoolYear || prev.school_year,
       }));
 
+      if (manualOrder && (editingEdition || manuallyEditedRef.current.has('description'))) {
+        setMsg(`Order confirmed for ${a.pageCount} pages. The cover is ready. Review the issue details before saving.`);
+        return;
+      }
+
       if (a.text.length < 20) {
         setMsg(
           `${orderStatus} The cover is ready, but the first pages have too little selectable text for Gemini. Fill in the metadata manually.`
@@ -155,6 +209,7 @@ export function EditionsManager({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: a.text, title: a.title ?? form.title }),
+          signal: AbortSignal.timeout(45000),
         });
         const result = (await response.json()) as AnalyzedEdition;
         if (runId !== analysisRunRef.current) return;
@@ -207,12 +262,8 @@ export function EditionsManager({
       if (runId !== analysisRunRef.current) return;
       setFile(null);
       setCover(null);
-      if (pdfInputRef.current) pdfInputRef.current.value = '';
-      setMsg(
-        err instanceof Error
-          ? err.message
-          : 'Could not safely read and order the PDF. Please check the file and try again.'
-      );
+      const message = err instanceof Error ? err.message : 'Could not prepare the PDF.';
+      setMsg(manualOrder ? message : `${message} You can switch to Manual order to arrange the selected PDF.`);
     } finally {
       if (runId === analysisRunRef.current) setAnalyzing(false);
     }
@@ -220,8 +271,12 @@ export function EditionsManager({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setMsg(null);
     if (busy || analyzing) return;
+    if (sourceFile && !file) {
+      setMsg(orderMode === 'manual' ? 'Confirm the page order before saving.' : 'Prepare the selected PDF before saving, or remove it.');
+      return;
+    }
+    setMsg(null);
     if (isDemoMode()) {
       setMsg('Demo mode: set up Supabase to publish real issues.');
       return;
@@ -235,35 +290,38 @@ export function EditionsManager({
       return;
     }
     setBusy(true);
-    setProgress(0);
+    setUploadStage('uploading');
+    const controller = new AbortController();
+    uploadController.current = controller;
     try {
-      const stamp = Date.now();
-      const slug = slugify(form.title) || 'issue';
+      const session = await getSupabaseBrowserClient()?.auth.getUser();
+      const userId = session?.data.user?.id;
+      if (!userId) throw new Error('Sign in again before uploading.');
       let coverPath: string | null = null;
       let pdfPath: string | null = null;
+      let editionId = editingEdition?.id;
 
       if (file && cover) {
-        // Upload directly to Storage: the PDF is too large to pass through an API route.
-        coverPath = `covers/${stamp}-${slug}.jpg`;
-        await uploadObject(coverPath, cover, 'image/jpeg', (fraction) =>
-          setProgress(Math.round(fraction * 5)),
-        );
-        pdfPath = `editions/${stamp}-${slug}.pdf`;
-        try {
-          await uploadObject(pdfPath, file, 'application/pdf', (fraction) =>
-            setProgress(5 + Math.round(fraction * 95)),
-          );
-        } catch (uploadErr) {
-          await removeObjects([coverPath]);
-          throw uploadErr;
+        if (!uploadAttempt.current || uploadAttempt.current.file !== file || uploadAttempt.current.cover !== cover || uploadAttempt.current.userId !== userId) {
+          if (uploadAttempt.current) void removeObjects(completedEditionUploads(uploadAttempt.current));
+          uploadAttempt.current = createEditionUpload(file, cover, userId, form.title, editingEdition?.id);
         }
+        const attempt = uploadAttempt.current;
+        await transferEditionFiles(attempt, { signal: controller.signal, onStatus: setTransferStatus, onProgress: (sent, total) => {
+          setProgress(Math.min(100, Math.round(sent / total * 100)));
+          setTransferBytes({ sent, total });
+        } });
+        pdfPath = attempt.pdfPath; coverPath = attempt.coverPath; editionId = attempt.editionId;
       }
 
+      setUploadStage('saving');
+      setTransferStatus('Files uploaded. Saving the issue…');
       const res = await fetch('/api/editions', {
         method: editingEdition ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(45000),
         body: JSON.stringify({
-          ...(editingEdition ? { id: editingEdition.id } : {}),
+          ...(editionId ? { id: editionId } : {}),
           number: form.number || '0',
           title: form.title,
           description: form.description,
@@ -274,10 +332,10 @@ export function EditionsManager({
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string; warning?: string };
       if (!res.ok) {
-        // The row was never created, so these objects belong to nobody.
-        if (pdfPath && coverPath) await removeObjects([pdfPath, coverPath]);
         throw new Error(json.error ?? `Upload failed (HTTP ${res.status})`);
       }
+      uploadAttempt.current = null;
+      setProgress(null); setTransferBytes(null); setTransferStatus('');
       setMsg(
         typeof json.warning === 'string'
           ? json.warning
@@ -286,6 +344,7 @@ export function EditionsManager({
             : 'Issue created! You can publish it whenever you like.'
       );
       setEditingEdition(null);
+      setSourceFile(null);
       setFile(null);
       setCover(null);
       if (pdfInputRef.current) pdfInputRef.current.value = '';
@@ -300,35 +359,41 @@ export function EditionsManager({
       analysisRunRef.current += 1;
       router.refresh();
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Unexpected error');
+      // Keep completed objects and the TUS URL so retry never starts over.
+      const paused = err instanceof Error && err.name === 'AbortError';
+      setTransferStatus(paused ? 'Upload paused. Your progress is kept on this page.' : 'Your upload progress is kept on this page.');
+      setMsg(paused ? 'Press Resume upload when you are ready.' : err instanceof Error ? err.message : 'Could not save the issue. Please retry.');
     } finally {
       setBusy(false);
-      setProgress(null);
+      setUploadStage('idle');
+      uploadController.current = null;
     }
   }
 
   async function togglePublish(ed: Edition) {
-    const res = await fetch('/api/editions', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: ed.id, published: !ed.published }),
-    });
-    if (!res.ok) setMsg('Could not update the issue. Please try again.');
-    router.refresh();
+    if (demo) { setMsg('Demo mode: changes are not saved.'); return; }
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { await requestJson('/api/editions', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: ed.id, published: !ed.published }) }); router.refresh(); }
+    catch (error) { setMsg(error instanceof Error ? error.message : 'Could not update the issue.'); }
+    finally { setBusy(false); }
   }
 
   async function remove(ed: Edition) {
+    if (demo) { setMsg('Demo mode: changes are not saved.'); return; }
     if (!confirm(`Delete "${ed.title}"? This cannot be undone.`)) return;
-    const res = await fetch(`/api/editions?id=${ed.id}`, { method: 'DELETE' });
-    if (!res.ok) setMsg('Could not delete the issue. Please try again.');
-    router.refresh();
+    if (busy) return;
+    setBusy(true); setMsg(null);
+    try { await requestJson(`/api/editions?id=${ed.id}`, { method: 'DELETE' }); router.refresh(); }
+    catch (error) { setMsg(error instanceof Error ? error.message : 'Could not delete the issue.'); }
+    finally { setBusy(false); }
   }
 
   const nextNumber =
     initialEditions.reduce((max, e) => Math.max(max, e.number), 0) + 1;
 
   return (
-    <div className="grid lg:grid-cols-[380px_1fr] gap-8">
+    <div className="admin-manager-grid grid gap-6">
       <form
         onSubmit={handleSubmit}
         className="panel rounded-xl p-5 space-y-3 h-fit"
@@ -337,21 +402,22 @@ export function EditionsManager({
           <h2 className="masthead text-xl font-bold">
             {editingEdition ? 'Edit issue' : 'New issue'}
           </h2>
-          <button
+          {editingEdition && <button
             type="button"
             onClick={cancelEditing}
             disabled={busy}
             className="inline-flex items-center gap-1 text-sm text-ink/60 hover:text-ink disabled:opacity-50"
           >
             <X size={16} /> Cancel editing
-          </button>
+          </button>}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="edition-number" className="block text-xs font-semibold mb-1">Number</label>
             <input
-              id="edition-number"
+              disabled={busy}
+            id="edition-number"
               type="number"
               min={1}
               value={form.number}
@@ -366,7 +432,8 @@ export function EditionsManager({
           <div>
             <label htmlFor="edition-date" className="block text-xs font-semibold mb-1">Date</label>
             <input
-              id="edition-date"
+              disabled={busy}
+            id="edition-date"
               type="date"
               value={form.edition_date}
               onChange={(e) => {
@@ -381,6 +448,7 @@ export function EditionsManager({
         <div>
           <label htmlFor="edition-title" className="block text-xs font-semibold mb-1">Title</label>
           <input
+            disabled={busy}
             id="edition-title"
             required
             value={form.title}
@@ -396,6 +464,7 @@ export function EditionsManager({
         <div>
           <label htmlFor="edition-description" className="block text-xs font-semibold mb-1">Description (optional)</label>
           <textarea
+            disabled={busy}
             id="edition-description"
             value={form.description}
             onChange={(e) => {
@@ -410,6 +479,7 @@ export function EditionsManager({
         <div>
           <label htmlFor="edition-school-year" className="block text-xs font-semibold mb-1">School year</label>
           <input
+            disabled={busy}
             id="edition-school-year"
             value={form.school_year}
             onChange={(e) => {
@@ -422,6 +492,24 @@ export function EditionsManager({
         </div>
 
         <div>
+          <label htmlFor="edition-page-order" className="mb-1 block text-xs font-semibold">Page order</label>
+          <select
+            id="edition-page-order"
+            value={orderMode}
+            disabled={busy || analyzing}
+            onChange={event => {
+              const mode = event.target.value === 'manual' ? 'manual' : 'automatic';
+              setOrderMode(mode);
+              if (sourceFile) handlePdfChange(sourceFile, mode, false);
+            }}
+            className="w-full rounded-lg border border-ink/20 px-3 py-2 text-sm"
+          >
+            <option value="automatic">Automatic (printed page numbers)</option>
+            <option value="manual">Manual (arrange thumbnails)</option>
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="edition-pdf" className="block text-xs font-semibold mb-1">
             Newspaper PDF {editingEdition ? '(optional; leave empty to keep current file)' : '*'}{' '}
             {analyzing && (
@@ -431,6 +519,7 @@ export function EditionsManager({
             )}
           </label>
           <input
+            disabled={busy}
             ref={pdfInputRef}
             id="edition-pdf"
             type="file"
@@ -449,17 +538,38 @@ export function EditionsManager({
               View current PDF
             </a>
           )}
-          {file && (
-            <p className="text-xs text-ink/60 mt-1">
-              {file.name} · {(file.size / 1048576).toFixed(1)} MB
-            </p>
+          {sourceFile && (
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-ink/60">
+              <span className="break-all">{sourceFile.name} · {((file ?? sourceFile).size / 1048576).toFixed(1)} MB</span>
+              <button type="button" disabled={busy} onClick={() => {
+                if (pdfInputRef.current) pdfInputRef.current.value = '';
+                handlePdfChange(null);
+              }} className="text-brand underline disabled:opacity-50">Remove selected PDF</button>
+            </div>
           )}
         </div>
 
+        {sourceFile && orderMode === 'manual' && (
+          <PdfPageOrder
+            file={sourceFile}
+            disabled={busy || analyzing}
+            confirmed={!!file && !!cover}
+            onChange={() => {
+              if (file) discardPendingUpload();
+              setFile(null);
+              setCover(null);
+              setMsg(null);
+            }}
+            onConfirm={order => void preparePdf(sourceFile, order)}
+          />
+        )}
+
         <div className="text-xs text-ink/60">
           {cover
-            ? 'Cover generated automatically from the first page of the selected PDF.'
-            : editingEdition?.cover_url
+            ? 'Cover generated from the first page in the confirmed order.'
+            : sourceFile
+              ? 'The first page in the final order will be used as the cover.'
+              : editingEdition?.cover_url
               ? 'The current cover will be kept unless you select a replacement PDF.'
               : 'The first page of the selected PDF will be used as the cover.'}
           {editingEdition?.cover_url && (
@@ -474,6 +584,14 @@ export function EditionsManager({
           )}
         </div>
 
+        {progress !== null && <div className="panel-note space-y-2 rounded-lg p-3 text-sm">
+          <p role="status">{transferStatus}</p>
+          <div role="progressbar" aria-label="Issue file upload" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} className="h-2 overflow-hidden rounded-full bg-brand/10"><div className="h-full rounded-full bg-brand transition-[width] duration-300" style={{ width: `${progress}%` }} /></div>
+          <p className="text-xs tabular-nums">{progress}%{transferBytes && ` · ${(transferBytes.sent / 1048576).toFixed(1)} / ${(transferBytes.total / 1048576).toFixed(1)} MB`}</p>
+          <p className="text-xs text-ink/60">Keep this page open. Interrupted PDF uploads resume from the last saved block.</p>
+          {uploadStage === 'uploading' && <button type="button" onClick={() => uploadController.current?.abort()} className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand"><Pause size={15} />Pause upload</button>}
+        </div>}
+
         {msg && (
           <p
             role="status"
@@ -486,16 +604,21 @@ export function EditionsManager({
 
         <button
           type="submit"
-          disabled={busy || analyzing}
+          disabled={busy || analyzing || !!(sourceFile && !file)}
           className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand text-paper py-2.5 font-semibold hover:bg-brand-dark disabled:opacity-50"
         >
           {analyzing ? <Wand2 size={16} className="animate-pulse" /> : editingEdition ? <Pencil size={16} /> : <Upload size={16} />}{' '}
           {analyzing
             ? 'Analyzing PDF…'
             : busy
-            ? progress !== null && progress < 100
+            ? uploadStage === 'saving'
+              ? 'Saving issue…'
+              :
+              progress !== null && progress < 100
               ? `Uploading… ${progress}%`
               : 'Processing…'
+            : uploadAttempt.current
+              ? uploadAttempt.current.pdfDone && uploadAttempt.current.coverDone ? 'Retry save' : 'Resume upload'
             : editingEdition
               ? 'Save changes'
               : 'Upload issue'}
@@ -504,11 +627,12 @@ export function EditionsManager({
 
       <div>
         <h2 className="masthead editorial-rule mb-4 border-b pb-2 text-2xl font-bold">All issues</h2>
-        {initialEditions.length === 0 ? (
-          <p className="text-ink/60 text-sm">No issues yet. Create the first one!</p>
+        <ContentFilter query={query} setQuery={setQuery} status={status} setStatus={setStatus} />
+        {visible.length === 0 ? (
+          <p className="panel rounded-xl p-8 text-center text-ink/60 text-sm">{initialEditions.length === 0 ? 'No issues yet. Create the first one!' : 'No issues match this search.'}</p>
         ) : (
           <ul className="space-y-3">
-            {initialEditions.map((ed) => (
+            {visible.map((ed) => (
               <li
                 key={ed.id}
                 className="panel flex items-center gap-3 rounded-xl p-3"
@@ -519,19 +643,17 @@ export function EditionsManager({
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">
                     {issueLabel(ed.number) && `${issueLabel(ed.number)} · `}{ed.title}
-                    {!ed.published && (
-                      <span className="ml-2 text-xs draft-badge rounded px-1.5 py-0.5">draft</span>
-                    )}
                   </p>
                   <p className="text-xs text-ink/60">
                     {formatMonthEs(ed.edition_date)} · School year {ed.school_year}
                   </p>
+                  <span className={`status-badge mt-2 ${ed.published ? 'status-live' : 'status-pending'}`}>{ed.published ? 'Published' : 'Draft'}</span>
                 </div>
                 <button
                   onClick={() => startEditing(ed)}
                   title="Edit issue"
                   aria-label={`Edit ${ed.title}`}
-                  disabled={busy || analyzing}
+                  disabled={busy || analyzing || (!demo && !admin && ed.created_by !== currentUserId)}
                   className="p-2 rounded-lg hover:bg-ink/5 disabled:opacity-40"
                 >
                   <Pencil size={18} />
@@ -540,7 +662,7 @@ export function EditionsManager({
                   onClick={() => togglePublish(ed)}
                   title={ed.published ? 'Unpublish' : 'Publish'}
                   aria-label={`${ed.published ? 'Unpublish' : 'Publish'} ${ed.title}`}
-                  disabled={busy || analyzing}
+                  disabled={busy || analyzing || (!demo && !admin && ed.created_by !== currentUserId)}
                   className="p-2 rounded-lg hover:bg-ink/5 disabled:opacity-40"
                 >
                   {ed.published ? <Eye size={18} /> : <EyeOff size={18} />}
@@ -549,7 +671,7 @@ export function EditionsManager({
                   onClick={() => remove(ed)}
                   title="Delete"
                   aria-label={`Delete ${ed.title}`}
-                  disabled={busy || analyzing}
+                  disabled={busy || analyzing || (!demo && !admin)}
                   className="p-2 rounded-lg hover:bg-ink/10 text-ink disabled:opacity-40"
                 >
                   <Trash2 size={18} />

@@ -8,12 +8,9 @@ import { getSupabaseServerClient } from './supabase-server';
 /** Editorial team list (profiles), ordered by sign-up date. */
 export async function getTeam(): Promise<ProfileLite[]> {
   if (isDemoMode()) return DEMO_TEAM;
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   if (!supabase) return [];
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, email, role')
-    .order('created_at', { ascending: true });
+  const { data, error } = await supabase.rpc('get_editorial_team');
   if (error) throw new Error(error.message);
   return (data ?? []) as ProfileLite[];
 }

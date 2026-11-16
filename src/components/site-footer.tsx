@@ -1,9 +1,10 @@
 import Image from 'next/image';
 import { Instagram } from 'lucide-react';
+import { Link } from '@/components/page-transitions';
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer relative z-10 mt-16 bg-[#00713f] text-[#fffdf8]">
+    <footer className="site-footer relative z-10 mt-16 text-[#fffdf8]">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 md:py-12">
           <div className="grid gap-8 border-b border-white/20 pb-8 md:grid-cols-[1fr_auto] md:items-end">
             <div>
@@ -18,12 +19,13 @@ export function SiteFooter() {
                 <span className="mx-2 text-[#fffdf8]/40">·</span>
                 615-325-2036
               </p>
+              <nav aria-label="Footer navigation" className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-sm font-medium"><Link href="/read" className="hover:underline">Latest issue</Link><Link href="/archive" className="hover:underline">Archive</Link><Link href="/news" className="hover:underline">News</Link><Link href="/admin" className="hover:underline">Editors' workspace ↗</Link></nav>
               <a
                 href="https://www.instagram.com/highlandacademy"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="mt-5 inline-flex items-center gap-2 text-sm text-[#fffdf8]/90 transition-colors hover:text-white"
-                aria-label="Instagram"
+                aria-label="Instagram (opens in a new tab)"
               >
                 <Instagram size={18} />
                 <span>Instagram</span>

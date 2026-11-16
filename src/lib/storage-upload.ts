@@ -1,6 +1,7 @@
 'use client';
 
 import { getSupabaseBrowserClient } from './supabase-browser';
+import { uploadResumable, UPLOAD_CHUNK_BYTES } from './resumable-upload';
 
 const BUCKET = 'newspaper';
 
@@ -12,19 +13,21 @@ function storageConfig(): { url: string; anonKey: string } | null {
 }
 
 /**
- * The panel's session lives in cookies (the SSR browser client), so RLS can
- * check who is uploading. Without a session this falls back to the anon key
- * and Storage answers 401 — a clear "sign in again" instead of a silent fail.
+ * The SSR browser client refreshes the user's session before file requests.
+ * Uploads always use a member token, including retries after token expiry.
  */
-async function accessToken(anonKey: string): Promise<string> {
+async function accessToken(refresh = false): Promise<string> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return anonKey;
-  try {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? anonKey;
-  } catch {
-    return anonKey;
-  }
+  if (!supabase) throw new Error('Sign in again before uploading.');
+  const { data, error } = refresh ? await supabase.auth.refreshSession() : await supabase.auth.getSession();
+  if (error || !data.session?.access_token) throw new Error('Sign in again before uploading.');
+  return data.session.access_token;
+}
+
+export interface UploadOptions {
+  signal?: AbortSignal;
+  onStatus?: (message: string) => void;
+  resume?: boolean;
 }
 
 function uploadError(xhr: XMLHttpRequest): Error {
@@ -49,25 +52,40 @@ function uploadError(xhr: XMLHttpRequest): Error {
  * policies as before, since the endpoint used to forward the editor's session
  * anyway — and the route handler afterwards only records the row.
  *
- * The body is the raw file with an explicit `Content-Type`, which is what
- * storage-js sends for a non-Blob body: it is how the object ends up stored
- * with the right MIME type instead of `application/octet-stream`.
- *
- * XHR rather than fetch for the upload progress bar: a 44 MB file on a school
- * connection is minutes of nothing otherwise.
+ * PDFs of 6 MB or more use TUS blocks with resumable progress. Small files use
+ * a direct XHR with the correct MIME type and progress reporting.
  */
 export async function uploadObject(
   path: string,
   file: Blob,
   contentType: string,
   onProgress?: (fraction: number) => void,
+  options: UploadOptions = {},
 ): Promise<void> {
   const config = storageConfig();
   if (!config) {
     throw new Error('Supabase is not configured: files cannot be uploaded in demo mode.');
   }
   const { url, anonKey } = config;
-  const token = await accessToken(anonKey);
+  if (options.signal?.aborted) throw new DOMException('The upload was paused.', 'AbortError');
+  const token = await accessToken();
+  const supabase = getSupabaseBrowserClient()!;
+  if (options.resume) {
+    // A final response may have been lost after Storage committed the object.
+    // Only reuse the exact owner-scoped, randomly generated attempt path.
+    const { data: owned } = await supabase.rpc('owns_newspaper_uploads', { object_paths: [path] });
+    if (owned === true) {
+      const { data, error } = await supabase.storage.from(BUCKET).info(path);
+      if (error) throw new Error('Could not verify the completed upload. Please retry.');
+      if (data?.size === file.size && data.contentType === contentType) {
+        onProgress?.(1); return;
+      }
+      throw new Error('This upload path already contains a different file. Select the PDF again.');
+    }
+  }
+  if (file.size >= UPLOAD_CHUNK_BYTES) {
+    return uploadResumable(file, { projectUrl: url, anonKey, path, contentType, token: accessToken, onProgress, ...options });
+  }
   // Storage routes on /object/<bucket>/<path>: without the bucket segment the
   // first path part is read as the bucket name and Storage answers
   // "Bucket not found".
@@ -78,8 +96,7 @@ export async function uploadObject(
     const xhr = new XMLHttpRequest();
     xhr.open('POST', objectUrl);
     xhr.responseType = 'text';
-    // Large PDFs over a slow connection: five minutes per file is generous
-    // enough to finish and short enough that a stalled upload always recovers.
+    // Only small files use a single request. Large PDFs use resumable chunks.
     xhr.timeout = 5 * 60 * 1000;
     xhr.setRequestHeader('apikey', anonKey);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -91,13 +108,17 @@ export async function uploadObject(
         onProgress?.(event.loaded / event.total);
       }
     };
+    const cleanup = () => options.signal?.removeEventListener('abort', pause);
+    function pause() { xhr.abort(); }
+    options.signal?.addEventListener('abort', pause, { once: true });
     xhr.onload = () => {
+      cleanup();
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(uploadError(xhr));
     };
-    xhr.onerror = () => reject(new Error('Network error while uploading. Check your connection and try again.'));
-    xhr.ontimeout = () => reject(new Error('The upload took too long and was cancelled. Try again, or use a smaller PDF.'));
-    xhr.onabort = () => reject(new Error('The upload was cancelled.'));
+    xhr.onerror = () => { cleanup(); reject(new Error('Network error while uploading. Keep this page open and retry.')); };
+    xhr.ontimeout = () => { cleanup(); reject(new Error('The connection stalled. Keep this page open and retry.')); };
+    xhr.onabort = () => { cleanup(); reject(new DOMException('The upload was paused.', 'AbortError')); };
     xhr.send(file);
   });
 }
@@ -113,7 +134,7 @@ export async function removeObjects(paths: string[]): Promise<void> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
   try {
-    await supabase.storage.from(BUCKET).remove(paths);
+    await fetch('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths }), keepalive: true, signal: AbortSignal.timeout(10000) });
   } catch {
     /* Nothing sensible to do: the object will be cleaned up by hand later. */
   }

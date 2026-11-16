@@ -1,13 +1,13 @@
 'use client';
 
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
+import { clipAtBoundary } from './edition-description';
 
 export interface PdfAnalysis {
   file: File;
   pageCount: number;
   pageOrderChanged: boolean;
   title: string | null;
-  description: string | null;
   editionDate: string | null; // yyyy-mm-dd
   schoolYear: string | null; // "2026-27"
   cover: File;
@@ -62,12 +62,12 @@ function findDate(text: string): { y: number; m: number; d?: number } | null {
  * Analyzes a newspaper PDF in the browser (Plan B):
  * - verifies and sorts pages by their printed page numbers
  * - title: biggest non-masthead text on the first numbered page, falling back to PDF metadata
- * - description: first long-ish line from the first numbered pages
  * - editionDate / schoolYear: "Month YYYY" found in metadata title or page text
  */
 export async function analyzePdf(
   file: File,
-  onProgress?: PdfAnalysisProgress
+  onProgress?: PdfAnalysisProgress,
+  manualOrder?: readonly number[]
 ): Promise<PdfAnalysis> {
   // Dynamic import: the editions panel is server-rendered too, and PDF.js
   // warns (and adds weight to the server bundle) when evaluated in Node.
@@ -75,20 +75,28 @@ export async function analyzePdf(
   pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
   const bytes = await file.arrayBuffer();
-  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)) }).promise;
+  const doc = await pdfjsLib.getDocument({ data: new Uint8Array(bytes.slice(0)), isEvalSupported: false }).promise;
 
   try {
     const meta = (await doc.getMetadata()).info as { Title?: string; Subject?: string };
     const metaTitle = (meta.Title ?? '').trim() || null;
     if (doc.numPages === 0) throw new Error('This PDF does not contain any pages.');
+    if (manualOrder && (
+      manualOrder.length !== doc.numPages || new Set(manualOrder).size !== doc.numPages ||
+      manualOrder.some(number => !Number.isInteger(number) || number < 1 || number > doc.numPages)
+    )) {
+      throw new Error('The manual order must include each PDF page exactly once.');
+    }
 
     const analyzedPages: AnalyzedPage[] = [];
     const pagesWithAmbiguousNumber: number[] = [];
 
-    for (let pdfIndex = 0; pdfIndex < doc.numPages; pdfIndex++) {
-      const page = await doc.getPage(pdfIndex + 1);
+    const pagesToRead = manualOrder?.slice(0, 2) ?? Array.from({ length: doc.numPages }, (_, index) => index + 1);
+    for (const pageNumber of pagesToRead) {
+      const pdfIndex = pageNumber - 1;
+      const page = await doc.getPage(pageNumber);
       const content = await page.getTextContent();
-      const candidates = findFooterPageNumbers(page, content.items);
+      const candidates = manualOrder ? [] : findFooterPageNumbers(page, content.items);
 
       if (candidates.length > 1) pagesWithAmbiguousNumber.push(pdfIndex + 1);
 
@@ -110,79 +118,19 @@ export async function analyzePdf(
       });
     }
 
-    const pagesForOcr = analyzedPages.filter(
-      (page) => page.printedNumber === null && !pagesWithAmbiguousNumber.includes(page.pdfIndex + 1)
-    );
-    if (pagesForOcr.length) {
-      onProgress?.(
-        `Reading printed numbers from ${pagesForOcr.length} scanned page footer(s) with Gemini…`
-      );
-      const ocrNumbers = await readScannedPageNumbers(pagesForOcr, doc, onProgress);
-      for (const page of pagesForOcr) {
-        page.printedNumber = ocrNumbers.get(page.pdfIndex + 1) ?? null;
-      }
-    }
-
-    const pagesWithoutNumber = analyzedPages
-      .filter((page) => page.printedNumber === null && !pagesWithAmbiguousNumber.includes(page.pdfIndex + 1))
-      .map((page) => page.pdfIndex + 1);
-    if (pagesWithoutNumber.length || pagesWithAmbiguousNumber.length) {
-      const details = [
-        pagesWithoutNumber.length
-          ? `no clear printed number on PDF page(s) ${pagesWithoutNumber.join(', ')}`
-          : '',
-        pagesWithAmbiguousNumber.length
-          ? `multiple possible numbers on PDF page(s) ${pagesWithAmbiguousNumber.join(', ')}`
-          : '',
-      ]
-        .filter(Boolean)
-        .join('; ');
-      throw new Error(
-        `Could not safely reorder this PDF: ${details}. Make sure every page has one clear page number near the bottom, then upload it again.`
-      );
-    }
-
-    const occurrences = new Map<number, number[]>();
-    for (const page of analyzedPages) {
-      const printedNumber = page.printedNumber;
-      if (printedNumber === null) continue;
-      const physicalPages = occurrences.get(printedNumber) ?? [];
-      physicalPages.push(page.pdfIndex + 1);
-      occurrences.set(printedNumber, physicalPages);
-    }
-    const duplicates = Array.from(occurrences.entries()).filter(
-      ([, physicalPages]) => physicalPages.length > 1
-    );
-    if (duplicates.length) {
-      const details = duplicates
-        .map(([number, physicalPages]) => `${number} (PDF page(s) ${physicalPages.join(', ')})`)
-        .join('; ');
-      throw new Error(
-        `Could not safely reorder this PDF: printed page numbers are duplicated: ${details}. Check the PDF and upload it again.`
-      );
-    }
-
-    const orderedPages = [...analyzedPages].sort(
-      (a, b) => (a.printedNumber ?? Number.MAX_SAFE_INTEGER) - (b.printedNumber ?? Number.MAX_SAFE_INTEGER)
-    );
-    for (let index = 1; index < orderedPages.length; index++) {
-      const previous = orderedPages[index - 1].printedNumber;
-      const current = orderedPages[index].printedNumber;
-      if (previous !== null && current !== null && current !== previous + 1) {
-        throw new Error(
-          `Could not safely reorder this PDF: page numbering skips from ${previous} to ${current}. Check for missing or unreadable pages, then upload it again.`
-        );
-      }
-    }
-    const pageOrderChanged = orderedPages.some((page, index) => page.pdfIndex !== index);
+    const orderedPages = manualOrder
+      ? analyzedPages
+      : await orderByPrintedNumbers(analyzedPages, pagesWithAmbiguousNumber, doc, onProgress);
+    const orderedIndices = manualOrder?.map(number => number - 1) ?? orderedPages.map(page => page.pdfIndex);
+    const pageOrderChanged = orderedIndices.some((pdfIndex, index) => pdfIndex !== index);
     const orderedFile = pageOrderChanged
-      ? await createOrderedPdf(file, bytes, orderedPages)
+      ? await createOrderedPdf(file, bytes, orderedIndices)
       : file;
 
     const firstPages = orderedPages.slice(0, 2);
     const runs = firstPages.flatMap((page) => page.runs);
     const pageTexts = firstPages.map((page) => page.text);
-    const coverPage = await doc.getPage(orderedPages[0].pdfIndex + 1);
+    const coverPage = await doc.getPage(orderedIndices[0] + 1);
     const baseViewport = coverPage.getViewport({ scale: 1 });
     const scale = Math.min(1.5, 1200 / Math.max(baseViewport.width, baseViewport.height));
     const viewport = coverPage.getViewport({ scale });
@@ -190,7 +138,7 @@ export async function analyzePdf(
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
     const context = canvas.getContext('2d');
-    if (!context) throw new Error('Could not prepare the first numbered page for the cover.');
+    if (!context) throw new Error('Could not prepare the first page for the cover.');
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     await coverPage.render({ canvasContext: context, viewport }).promise;
@@ -199,7 +147,7 @@ export async function analyzePdf(
         (blob) =>
           blob
             ? resolve(blob)
-            : reject(new Error('Could not export the first numbered page as a cover.')),
+            : reject(new Error('Could not export the first page as a cover.')),
         'image/jpeg',
         0.86
       );
@@ -212,27 +160,94 @@ export async function analyzePdf(
       .filter((run) => !MASTHEADS.test(run.text))
       .sort((a, b) => b.height - a.height);
     const headline = sorted[0]?.text ?? null;
-    const description =
-      sorted
-        .slice(1)
-        .map((run) => run.text)
-        .find((text) => text.length > 40 && text !== headline) ?? null;
     const date = findDate(`${metaTitle ?? ''} ${pageTexts.join(' ')}`);
 
     return {
       file: orderedFile,
-      pageCount: orderedPages.length,
+      pageCount: doc.numPages,
       pageOrderChanged,
       title: headline ?? metaTitle,
-      description,
       editionDate: date ? isoFrom(date.y, date.m, date.d) : null,
       schoolYear: date ? schoolYearFrom(date.y, date.m) : null,
       cover,
-      text: pageTexts.join('\n').slice(0, 6000),
+      text: pageTexts.map(text => clipAtBoundary(text, 1800)).join('\n'),
     };
   } finally {
     await doc.destroy();
   }
+}
+
+async function orderByPrintedNumbers(
+  analyzedPages: AnalyzedPage[],
+  pagesWithAmbiguousNumber: number[],
+  doc: PDFDocumentProxy,
+  onProgress?: PdfAnalysisProgress
+) {
+  const pagesForOcr = analyzedPages.filter(
+    (page) => page.printedNumber === null && !pagesWithAmbiguousNumber.includes(page.pdfIndex + 1)
+  );
+  if (pagesForOcr.length) {
+    onProgress?.(
+      `Reading printed numbers from ${pagesForOcr.length} scanned page footer(s) with Gemini…`
+    );
+    const ocrNumbers = await readScannedPageNumbers(pagesForOcr, doc, onProgress);
+    for (const page of pagesForOcr) {
+      page.printedNumber = ocrNumbers.get(page.pdfIndex + 1) ?? null;
+    }
+  }
+
+  const pagesWithoutNumber = analyzedPages
+    .filter((page) => page.printedNumber === null && !pagesWithAmbiguousNumber.includes(page.pdfIndex + 1))
+    .map((page) => page.pdfIndex + 1);
+  if (pagesWithoutNumber.length || pagesWithAmbiguousNumber.length) {
+    const details = [
+      pagesWithoutNumber.length
+        ? `no clear printed number on PDF page(s) ${pagesWithoutNumber.join(', ')}`
+        : '',
+      pagesWithAmbiguousNumber.length
+        ? `multiple possible numbers on PDF page(s) ${pagesWithAmbiguousNumber.join(', ')}`
+        : '',
+    ]
+      .filter(Boolean)
+      .join('; ');
+    throw new Error(
+      `Could not safely reorder this PDF: ${details}. Make sure every page has one clear page number near the bottom, then upload it again.`
+    );
+  }
+
+  const occurrences = new Map<number, number[]>();
+  for (const page of analyzedPages) {
+    const printedNumber = page.printedNumber;
+    if (printedNumber === null) continue;
+    const physicalPages = occurrences.get(printedNumber) ?? [];
+    physicalPages.push(page.pdfIndex + 1);
+    occurrences.set(printedNumber, physicalPages);
+  }
+  const duplicates = Array.from(occurrences.entries()).filter(
+    ([, physicalPages]) => physicalPages.length > 1
+  );
+  if (duplicates.length) {
+    const details = duplicates
+      .map(([number, physicalPages]) => `${number} (PDF page(s) ${physicalPages.join(', ')})`)
+      .join('; ');
+    throw new Error(
+      `Could not safely reorder this PDF: printed page numbers are duplicated: ${details}. Check the PDF and upload it again.`
+    );
+  }
+
+  const orderedPages = [...analyzedPages].sort(
+    (a, b) => (a.printedNumber ?? Number.MAX_SAFE_INTEGER) - (b.printedNumber ?? Number.MAX_SAFE_INTEGER)
+  );
+  for (let index = 1; index < orderedPages.length; index++) {
+    const previous = orderedPages[index - 1].printedNumber;
+    const current = orderedPages[index].printedNumber;
+    if (previous !== null && current !== null && current !== previous + 1) {
+      throw new Error(
+        `Could not safely reorder this PDF: page numbering skips from ${previous} to ${current}. Check for missing or unreadable pages, then upload it again.`
+      );
+    }
+  }
+  return orderedPages;
 }
 
 async function readScannedPageNumbers(
@@ -360,14 +375,14 @@ function findFooterPageNumbers(
 async function createOrderedPdf(
   file: File,
   bytes: ArrayBuffer,
-  pages: AnalyzedPage[]
+  pageIndices: number[]
 ): Promise<File> {
   const { PDFDocument } = await import('pdf-lib');
   const source = await PDFDocument.load(bytes);
   const ordered = await PDFDocument.create();
   const copiedPages = await ordered.copyPages(
     source,
-    pages.map((page) => page.pdfIndex)
+    pageIndices
   );
   copiedPages.forEach((page) => ordered.addPage(page));
 

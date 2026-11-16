@@ -1,0 +1,13 @@
+# The demo issues are 42 MB each and are only used when the site runs without
+# Supabase (local development). They stay in the repository, but they do not
+# travel to the deployment.
+public/demo/*.pdf
+public/demo/pdfs/*.pdf
+
+# Local files that must never be deployed.
+.env
+.env.*
+!.env.example
+.vercel
+.cache
+node_modules

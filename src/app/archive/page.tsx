@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { getPublishedEditions } from '@/lib/data-editions';
 import { EditionCard } from '@/components/cards';
+import { BookOpen } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,6 +9,7 @@ export const metadata: Metadata = {
   title: 'Archive',
   description: 'Every published issue of the school newspaper.',
   alternates: { canonical: '/archive' },
+  openGraph: { url: '/archive' },
 };
 
 export default async function ArchivePage() {
@@ -32,7 +34,7 @@ export default async function ArchivePage() {
       </p>
 
       {editions.length === 0 && (
-        <p className="text-ink/60">No issues published yet.</p>
+        <div className="public-card rounded-2xl border border-ink/10 p-10 text-center md:p-16"><BookOpen size={36} strokeWidth={1.3} className="mx-auto text-brand" aria-hidden /><h2 className="masthead mt-5 text-2xl font-bold">A collection in the making</h2><p className="mx-auto mt-3 max-w-md text-sm text-ink/60">Every published issue will find a home here. The newspaper team is preparing the first edition.</p></div>
       )}
 
       {years.map((year) => (

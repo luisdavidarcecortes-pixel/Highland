@@ -46,6 +46,7 @@ export class GeminiError extends Error {
 /**
  * Calls Gemini with the primary model and, if it fails for any reason
  * (overload, timeout, bad response), retries once with a different model.
+ * Short follow-up calls can pass `models` to limit the retry chain.
  * Returns the raw JSON text the model produced.
  */
 export async function generateGeminiJson({
@@ -53,17 +54,25 @@ export async function generateGeminiJson({
   parts,
   generationConfig,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  models,
 }: {
   apiKey: string;
   parts: Array<Record<string, unknown>>;
   generationConfig: GeminiGenerationConfig;
   timeoutMs?: number;
+  /**
+   * Optional model list for short follow-up calls. Defaults to the primary
+   * model plus its fallback; duplicates are removed.
+   */
+  models?: readonly string[];
 }): Promise<string> {
-  const models = Array.from(new Set([GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL]));
+  const modelList = Array.from(
+    new Set(models?.length ? models : [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL])
+  );
   let lastMessage = 'Could not reach Gemini.';
   let lastStatus = 502;
 
-  for (const model of models) {
+  for (const model of modelList) {
     try {
       const response = await fetch(GEMINI_URL.replace('{model}', model), {
         method: 'POST',

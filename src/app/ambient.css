@@ -1,0 +1,224 @@
+/* ---------- Ambient backdrop -------------------------------------------------
+   Fixed, decorative layer painted under every page — the public newspaper
+   and the editorial workspace share it, because it is mounted once in the
+   root layout. Seven soft colour pools drift on very long, eased cycles
+   (between 98 and 142 seconds per loop, a few pixels a second at most), then
+   a milky white wash and fine grain sit on top. Only `transform` animates;
+   the gradients and texture stay static, without video, canvas or timers.
+
+   The white wash is not decoration, it is the readability contract: text keeps
+   its contrast no matter which hue drifts underneath, which is why the colours
+   can stay saturated enough to be seen at all. */
+
+/* Keep the decorative layer above the body's white paint, under all content. */
+body {
+  position: relative;
+  isolation: isolate;
+  background: #fcfcff;
+}
+
+body:has(.admin-shell),
+.admin-login {
+  background: transparent;
+}
+
+.site-header,
+.admin-sidebar {
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.admin-shell .panel,
+.public-card {
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
+.ambient-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* Isolate the blend modes and the paint work from the page above. */
+  contain: layout paint style;
+  background:
+    radial-gradient(120% 85% at 50% -12%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(95% 70% at 50% 118%, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 72%),
+    #fcfcff;
+}
+
+.ambient-light {
+  position: absolute;
+  /* Bound the raster size on large screens and center each colour pool. */
+  width: min(var(--light-size, 70vmax), 1100px);
+  height: min(var(--light-size, 70vmax), 1100px);
+  margin-left: calc(-0.5 * min(var(--light-size, 70vmax), 1100px));
+  margin-top: calc(-0.5 * min(var(--light-size, 70vmax), 1100px));
+  border-radius: 50%;
+  background: var(--light-color);
+  opacity: var(--light-opacity, 0.5);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  animation: ambient-drift var(--light-duration, 120s) ease-in-out var(--light-delay, 0s) infinite;
+}
+
+.ambient-light-rose {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(255, 146, 178, 0.78) 0%, rgba(255, 146, 178, 0) 68%);
+  --light-size: 78vmax;
+  --light-opacity: 0.55;
+  --light-duration: 118s;
+  --light-delay: -18s;
+  --drift-x: 7vmax;
+  --drift-y: 6vmax;
+  --drift-scale: 1.12;
+  top: 10%;
+  left: 8%;
+}
+
+.ambient-light-amber {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(255, 199, 128, 0.76) 0%, rgba(255, 199, 128, 0) 68%);
+  --light-size: 72vmax;
+  --light-opacity: 0.5;
+  --light-duration: 126s;
+  --light-delay: -52s;
+  --drift-x: -8vmax;
+  --drift-y: 7vmax;
+  --drift-scale: 1.1;
+  top: 10%;
+  left: 90%;
+}
+
+.ambient-light-mint {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(130, 226, 184, 0.72) 0%, rgba(130, 226, 184, 0) 68%);
+  --light-size: 74vmax;
+  --light-opacity: 0.48;
+  --light-duration: 110s;
+  --light-delay: -12s;
+  --drift-x: 8vmax;
+  --drift-y: -6vmax;
+  --drift-scale: 1.14;
+  top: 90%;
+  left: 8%;
+}
+
+.ambient-light-sky {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(140, 194, 255, 0.7) 0%, rgba(140, 194, 255, 0) 68%);
+  --light-size: 68vmax;
+  --light-opacity: 0.46;
+  --light-duration: 134s;
+  --light-delay: -70s;
+  --drift-x: -9vmax;
+  --drift-y: -5vmax;
+  --drift-scale: 1.08;
+  top: 55%;
+  left: 98%;
+}
+
+.ambient-light-lavender {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(184, 168, 255, 0.66) 0%, rgba(184, 168, 255, 0) 68%);
+  --light-size: 76vmax;
+  --light-opacity: 0.44;
+  --light-duration: 122s;
+  --light-delay: -34s;
+  --drift-x: -7vmax;
+  --drift-y: -8vmax;
+  --drift-scale: 1.12;
+  top: 98%;
+  left: 78%;
+}
+
+.ambient-light-peach {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(255, 178, 148, 0.64) 0%, rgba(255, 178, 148, 0) 70%);
+  --light-size: 54vmax;
+  --light-opacity: 0.4;
+  --light-duration: 98s;
+  --light-delay: -60s;
+  --drift-x: 6vmax;
+  --drift-y: -7vmax;
+  --drift-scale: 1.16;
+  top: 60%;
+  left: 42%;
+}
+
+.ambient-light-aqua {
+  --light-color: radial-gradient(circle at 50% 50%, rgba(146, 232, 226, 0.6) 0%, rgba(146, 232, 226, 0) 70%);
+  --light-size: 56vmax;
+  --light-opacity: 0.38;
+  --light-duration: 142s;
+  --light-delay: -24s;
+  --drift-x: -6vmax;
+  --drift-y: 8vmax;
+  --drift-scale: 1.1;
+  top: 20%;
+  left: 52%;
+}
+
+/* White clouds soften the colours without an animated blur filter. */
+.ambient-wash {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(65% 55% at 18% 22%, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0) 72%),
+    radial-gradient(58% 48% at 84% 78%, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0) 74%),
+    radial-gradient(80% 60% at 50% 50%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0) 80%);
+}
+
+/* The grain is one cached SVG tile, repeated: cheap to paint, and the only
+   thing in this layer that is not a gradient. */
+.ambient-grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='0.25' intercept='0.75'/%3E%3CfeFuncG type='linear' slope='0.25' intercept='0.75'/%3E%3CfeFuncB type='linear' slope='0.25' intercept='0.75'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.42;
+  mix-blend-mode: soft-light;
+}
+
+.ambient-grain-fine {
+  background-size: 96px 96px;
+  opacity: 0.2;
+}
+
+@media (max-width: 640px) {
+  .ambient-light-peach,
+  .ambient-light-aqua {
+    display: none;
+  }
+}
+
+@keyframes ambient-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(var(--drift-x, 6vmax), var(--drift-y, 5vmax), 0) scale(var(--drift-scale, 1.1));
+  }
+}
+
+/* The lights are the backdrop. For users who ask for stillness the colours
+   stay, frozen in their starting arrangement, with no motion at all. */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-light {
+    animation: none;
+  }
+}
+
+/* Nothing moves while the tab is in the background: the browser would keep
+   compositing seven layers for a visitor who is not looking. */
+html[data-hidden] .ambient-light,
+html[data-hidden] .ambient-grain {
+  animation-play-state: paused;
+}
+
+@media (prefers-contrast: more) {
+  .ambient-light,
+  .ambient-grain {
+    display: none;
+  }
+}
+
+@media print {
+  .ambient-backdrop {
+    display: none;
+  }
+}

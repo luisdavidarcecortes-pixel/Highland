@@ -1,16 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, forwardRef, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import HTMLFlipBook from 'react-pageflip';
 import type { PageFlip } from 'page-flip';
 import { motion, AnimatePresence, MotionConfig } from 'motion/react';
-import { easeOutQuint, springSoft } from './motion-tokens';
+import { springSoft } from './motion-tokens';
 import { usePdfDoc } from '@/lib/use-pdf-doc';
 import { usePdfPages } from './use-pdf-pages';
+import { usePreparedPages } from './use-prepared-pages';
 import { useElementSize } from './use-size';
 import { playFlipSound } from './page-flip-sound';
 import { useAutoFlip } from './use-auto-flip';
-import { renderPdfPage } from './pdf-render';
+import { PageZoom } from './page-zoom';
+import { clampPage, initialReaderPage, LAST_PAGE_KEY, visiblePageRange } from './reader-state';
 import {
   Toolbar,
   ThumbsPanel,
@@ -18,9 +20,7 @@ import {
   TocPanel,
   Filmstrip,
 } from './toolbar';
-import { X, ZoomIn, ZoomOut } from 'lucide-react';
 import { SlowVideo } from '@/components/slow-video';
-import { useDialogFocus } from '@/lib/use-dialog-focus';
 
 interface FlipbookProps {
   pdfUrl: string;
@@ -29,19 +29,110 @@ interface FlipbookProps {
   editionId?: string;
 }
 
-const LAST_PAGE_KEY = (id: string) => `highlander:lastpage:${id}`;
+type BookHandle = { pageFlip: () => PageFlip | undefined };
+
+const PageSources = createContext<string[]>([]);
+const BookPage = forwardRef<HTMLDivElement, { n: number }>(function BookPage({ n }, ref) {
+  const sources = useContext(PageSources);
+  return <div ref={ref} data-pdf-page={n} className="bg-white"><img src={sources[n - 1]} alt={`Page ${n}`} className="w-full h-full object-contain" draggable={false} decoding="async" /></div>;
+});
+
+/**
+ * The page-flip book, plus the teardown react-pageflip does not do.
+ *
+ * page-flip attaches window resize/mouse/touch listeners that only
+ * `PageFlip.destroy()` removes. The reader remounts this component whenever
+ * the page size changes (resize, orientation, watchdog heal)
+ * because its key encodes them, so without this each remount would leak a
+ * whole book plus its page images.
+ */
+function BookView({
+  bookRef,
+  width,
+  height,
+  isPortrait,
+  onFlip,
+  onInit,
+  onChangeState,
+  children,
+}: {
+  bookRef: React.MutableRefObject<BookHandle | null>;
+  width: number;
+  height: number;
+  isPortrait: boolean;
+  onFlip: (e: { data: number }) => void;
+  onInit: () => void;
+  onChangeState: (e: { data: string }) => void;
+  children: React.ReactNode;
+}) {
+  const instance = useRef<PageFlip | null>(null);
+
+  useEffect(() => {
+    return () => {
+      try {
+        instance.current?.destroy();
+      } catch {
+        // The DOM may already be detached: destroying is best-effort.
+      }
+      instance.current = null;
+    };
+  }, []);
+
+  return (
+    <HTMLFlipBook
+      ref={bookRef}
+      className=""
+      style={{}}
+      width={width}
+      height={height}
+      size="fixed"
+      startPage={0}
+      minWidth={180}
+      maxWidth={2000}
+      minHeight={240}
+      maxHeight={2000}
+      startZIndex={2}
+      autoSize
+      mobileScrollSupport
+      clickEventForward
+      useMouseEvents
+      showPageCorners
+      disableFlipByClick={true}
+      showCover={true}
+      usePortrait={isPortrait}
+      drawShadow
+      flippingTime={750}
+      maxShadowOpacity={0.5}
+      swipeDistance={20}
+      onFlip={onFlip}
+      onInit={() => {
+        instance.current = bookRef.current?.pageFlip() ?? null;
+        onInit();
+      }}
+      onChangeState={onChangeState}
+    >
+      {children}
+    </HTMLFlipBook>
+  );
+}
 
 export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
-  const { doc, loading, error: loadError, progress, retry } = usePdfDoc(pdfUrl);
-  const { pages, texts, aspect, error: renderError, ready } = usePdfPages(doc);
+  const [page, setPage] = useState(() => {
+    let saved = null;
+    try { if (editionId) saved = localStorage.getItem(LAST_PAGE_KEY(editionId)); } catch { /* Storage is optional. */ }
+    return initialReaderPage(typeof window === 'undefined' ? '' : window.location.search, saved);
+  });
+  const prepared = usePreparedPages(editionId, pdfUrl);
+  const usePreviews = !prepared.failed;
+  const { doc, loading, error: loadError, progress, retry } = usePdfDoc(usePreviews ? null : pdfUrl);
+  const rendered = usePdfPages(doc, page);
+  const { pages, texts, aspect, error: renderError, ready, numPages, completed, failedPages, retry: retryPages } = usePreviews ? prepared.result : rendered;
   const bookRef = useRef<{ pageFlip: () => PageFlip | undefined } | null>(null);
   const { w, h } = useElementSize('fb-wrap');
-  const [page, setPage] = useState(1);
   // Mirror of `page` used to restore the position after the book remounts
-  // (zoom / resize / orientation change recreate it starting at page 0).
+  // (resize / orientation change recreate it starting at page 0).
   const pageRef = useRef(1);
-  pageRef.current = page;
-  const [zoom, setZoom] = useState(1);
+  pageRef.current = numPages > 0 ? clampPage(page, numPages) : page;
   const [sound, setSound] = useState(false);
   const [thumbs, setThumbs] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
@@ -49,6 +140,8 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   const [query, setQuery] = useState('');
   const [playing, setPlaying] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState('');
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const [jumpVeil, setJumpVeil] = useState(false); // white veil on distant jumps (>2 pages)
   const veilTimerRef = useRef<number | null>(null);
@@ -64,62 +157,25 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       }
     }
   );
-  const [mounted, setMounted] = useState(false); // fade-in on ready
   const soundRef = useRef(false);
   soundRef.current = sound;
 
   const error = loadError ?? renderError;
   const isPortrait = w > 0 && w < 768;
-
-  // ---- Deep link: read ?page=N once on mount -------------------------------
-  const initialPageRef = useRef(1);
+  const visible = visiblePageRange(page, numPages || 1, isPortrait);
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get('page');
-    const n = p ? parseInt(p, 10) : NaN;
-    if (!Number.isNaN(n) && n >= 1) initialPageRef.current = n;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // When the book first becomes ready, open on the deep-linked page (or the
-  // remembered last page of this edition when there is no ?page= param).
-  const restoredRef = useRef(false);
-  useEffect(() => {
-    if (error) setMounted(true); // never hide the error message behind the fade
-  }, [error]);
-  useEffect(() => {
-    if (!ready || restoredRef.current) return;
-    restoredRef.current = true;
-    const fromUrl = initialPageRef.current;
-    // Storage can throw (private mode, storage blocked in an iframe): a
-    // missing "remembered page" must never break the reader.
-    let saved = NaN;
-    if (editionId) {
-      try {
-        saved = parseInt(localStorage.getItem(LAST_PAGE_KEY(editionId)) ?? '', 10);
-      } catch {
-        saved = NaN;
-      }
-    }
-    const target = Math.min(
-      Math.max(1, fromUrl > 1 ? fromUrl : !Number.isNaN(saved) && saved >= 1 ? saved : 1),
-      pages.length || 1
-    );
-    if (target > 1) {
-      initialPageRef.current = target;
-      setPage(target);
-    }
-    setMounted(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready]);
+    if (numPages > 0) setPage(value => clampPage(value, numPages));
+  }, [numPages]);
 
   // Persist last page per edition (throttled by flip events, cheap).
   useEffect(() => {
-    if (!editionId || !ready) return;
+    if (!editionId || !ready || page > numPages) return;
     try {
       localStorage.setItem(LAST_PAGE_KEY(editionId), String(page));
     } catch {
       // private mode / quota — ignore
     }
-  }, [page, editionId, ready]);
+  }, [page, editionId, ready, numPages]);
 
   // Persist the strip preference whenever it changes (the initial value is
   // read lazily in useState, so every run of this effect is a user change).
@@ -131,20 +187,26 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     }
   }, [strip]);
 
-  // ---- URL sync: replace ?page=N on every flip -----------------------------
+  // ---- URL sync: replace ?page=N, but not on every single frame -------------
   useEffect(() => {
-    if (!ready) return;
-    const url = new URL(window.location.href);
-    if (page > 1) url.searchParams.set('page', String(page));
-    else url.searchParams.delete('page');
-    window.history.replaceState(null, '', url.toString());
-  }, [page, ready]);
+    if (!ready || page > numPages) return;
+    // Next patches history.replaceState and dispatches a router update for each
+    // call, so the URL is written once the page settles instead of on every
+    // intermediate frame of a fast flip.
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href);
+      if (page > 1) url.searchParams.set('page', String(page));
+      else url.searchParams.delete('page');
+      window.history.replaceState(window.history.state, '', url.toString());
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [page, ready, numPages]);
 
   // ---- Derived helpers ------------------------------------------------------
   const goTo = useCallback(
     (n: number) => {
       if (navLockRef.current) return;
-      const clamped = Math.max(1, Math.min(n, pages.length || 1));
+      const clamped = clampPage(n, pages.length || 1);
       // Distant jumps get a quick ink veil so the instant swap reads as a
       // soft whoosh instead of a hard cut.
       if (Math.abs(clamped - pageRef.current) > 2) {
@@ -177,7 +239,6 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       const start = Math.max(0, idx - 34);
       const snippet = (start > 0 ? '…' : '') + t.slice(start, idx + q.length + 44).trim() + '…';
       out.push({ page: i + 1, snippet });
-      if (out.length >= 24) break;
     }
     return out;
   }, [query, texts]);
@@ -207,48 +268,25 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   }, [texts]);
 
   // ---- Zoom overlay (Google-Books style page view) --------------------------
-  const [zoomPage, setZoomPage] = useState<{ n: number; url: string } | null>(null);
-  const [zoomLoading, setZoomLoading] = useState(false);
-  const [zoomScale, setZoomScale] = useState(1);
-  const [zoomPan, setZoomPan] = useState({ x: 0, y: 0 });
-
-  const openZoom = useCallback(
-    async (n: number) => {
-      if (!doc) return;
-      setZoomPage({ n, url: pages[n - 1] ?? '' });
-      setZoomScale(1);
-      setZoomPan({ x: 0, y: 0 });
-      setZoomLoading(true);
-      const hi = await renderPdfPage(doc, n, { scale: 2.6, quality: 0.9 });
-      if (hi) setZoomPage((cur) => (cur && cur.n === n ? { n, url: hi.url } : cur));
-      setZoomLoading(false);
-    },
-    [doc, pages]
-  );
+  const [zoomPage, setZoomPage] = useState<{ n: number; scale: number } | null>(null);
+  const openZoom = useCallback((n: number, scale = 1) => {
+    if (!ready) return;
+    setPlaying(false);
+    setZoomPage({ n: clampPage(n, numPages), scale });
+  }, [numPages, ready]);
 
   // Google-Books style: double-click / double-tap a page to open it big.
   const onBookDoubleClick = useCallback(
     (ev: React.MouseEvent) => {
-      const img = (ev.target as HTMLElement).closest('img');
-      if (!img) return;
-      // The page children ARE <img class="stf__item"> elements in DOM order:
-      // index i is PDF page i + 1 in BOTH orientations.
-      const items = Array.from(document.querySelectorAll<HTMLImageElement>('img.stf__item'));
-      const idx = items.indexOf(img as HTMLImageElement);
-      if (idx === -1) return;
-      void openZoom(idx + 1);
+      const item = (ev.target as HTMLElement).closest<HTMLElement>('[data-pdf-page]');
+      if (item) void openZoom(Number(item.dataset.pdfPage));
     },
-    [isPortrait, openZoom]
+    [openZoom]
   );
 
   const closeZoom = useCallback(() => {
     setZoomPage(null);
-    setZoomScale(1);
-    setZoomPan({ x: 0, y: 0 });
   }, []);
-  // The zoom overlay is modal: trap Tab inside it, close on Escape and give
-  // focus back to the book when it closes.
-  const zoomDialogRef = useDialogFocus<HTMLDivElement>(!!zoomPage, closeZoom);
 
   // ---- Page size -------------------------------------------------------------
   const getPageWidth = () => {
@@ -256,8 +294,8 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     const pageTopInset = 56; // keep the page clear of the toolbar
     const pageBottomInset = strip && pages.length > 2 ? 96 : 12;
     // In landscape the book is two pages side by side; each page gets half the width.
-    const maxPageW = (isPortrait ? w - 24 : (w - 24) / 2) * zoom;
-    const maxPageH = (h - pageTopInset - pageBottomInset) * zoom;
+    const maxPageW = isPortrait ? w - 24 : (w - 24) / 2;
+    const maxPageH = h - pageTopInset - pageBottomInset;
     // The binding constraint decides: too wide -> shrink to fit height, too tall -> shrink to fit width.
     const fitted = Math.min(maxPageW, maxPageH * aspect);
     return Math.max(180, Math.round(fitted));
@@ -276,11 +314,6 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       // Child index N = PDF page N + 1 in both orientations (no bookend
       // ghosts; the cover is child 0).
       setPage(e.data + 1);
-      navLockRef.current = false;
-      if (flipWatchRef.current !== null) {
-        window.clearTimeout(flipWatchRef.current);
-        flipWatchRef.current = null;
-      }
       if (soundRef.current) playFlipSound();
     },
     []
@@ -291,23 +324,15 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   // changes IDENTITY. Recreating them on every render (page flips, toolbar
   // toggles) makes React fight the library's DOM surgery and crashes with
   // "insertBefore NotFoundError". Memoized, they are processed exactly once
-  // per mount; zoom/resize/orientation remount the book via the key instead.
+  // per mount; resize/orientation remount the book via the key instead.
   // Children are ONLY the real page images, in both orientations. No bookend
   // ghost pages: with showCover, page-flip itself keeps the cover alone on
   // the right (closed newspaper) and the last page alone on the left, so
   // every element revealed during any flip carries real page content.
   const bookChildren = useMemo(
     () =>
-      pages.map((src, i) => (
-        <img
-          key={`p-${i}`}
-          src={src}
-          alt={`Page ${i + 1}`}
-          className="w-full h-full object-contain bg-white"
-          draggable={false}
-        />
-      )),
-    [pages]
+      Array.from({ length: numPages }, (_, i) => <BookPage key={`p-${i}`} n={i + 1} />),
+    [numPages]
   );
 
   const pf = () => bookRef.current?.pageFlip();
@@ -321,7 +346,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     pf()?.flipNext();
   }, []);
 
-  // When the book (re)mounts — first load and every zoom/resize/orientation
+  // When the book (re)mounts — first load and every resize/orientation
   // change, which recreate it via the key — restore the reader's position.
   // onInit fires after page-flip has created the instance and loaded the
   // pages, so turnToPage lands reliably (unlike rAF after render).
@@ -352,7 +377,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         navLockRef.current = false;
         flipWatchRef.current = null;
         setBookEpoch((k) => k + 1); // heal the frozen fold
-      }, 1400);
+      }, 4000);
     }
   }, []);
 
@@ -360,30 +385,26 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     () => () => {
       if (flipWatchRef.current !== null) window.clearTimeout(flipWatchRef.current);
       if (veilTimerRef.current !== null) window.clearTimeout(veilTimerRef.current);
+      clearTimeout(copyTimerRef.current);
     },
     []
   );
 
   // ---- Keyboard shortcuts (ignored while typing in inputs) ------------------
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     const el = document.getElementById('fb-wrap');
-    if (!document.fullscreenElement) void el?.requestFullscreen?.();
-    else void document.exitFullscreen();
+    try {
+      if (!document.fullscreenElement && el?.requestFullscreen) await el.requestFullscreen();
+      else if (document.fullscreenElement) await document.exitFullscreen();
+      else setNotice('Fullscreen is unavailable in this browser. You can enlarge a page with Zoom.');
+    } catch { setNotice('Fullscreen could not be opened. You can enlarge a page with Zoom.'); }
   };
 
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       // The zoom overlay is modal: only it reacts while it is open, so the
       // book cannot silently flip behind the page the reader is inspecting.
-      if (zoomPage) {
-        if (ev.key === 'Escape') closeZoom();
-        else if (ev.key === '+' || ev.key === '=') {
-          setZoomScale((s) => Math.min(4, +(s + 0.25).toFixed(2)));
-        } else if (ev.key === '-' || ev.key === '_') {
-          setZoomScale((s) => Math.max(0.5, +(s - 0.25).toFixed(2)));
-        }
-        return;
-      }
+      if (zoomPage || !ready || ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
 
       // Search, contents and thumbnails are modal dialogs: they own the
       // keyboard while open. Without this guard, an arrow key pressed on a
@@ -392,19 +413,12 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
 
       const el = ev.target as HTMLElement | null;
       const isTyping =
-        !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
-
-      // Escape closes a panel even when the focus is inside the search field:
-      // the typing guard below used to swallow it, trapping the reader in the
-      // search box with no keyboard way out.
-      if (ev.key === 'Escape') {
-        if (searchOpen) setSearchOpen(false);
-        else if (tocOpen) setTocOpen(false);
-        else if (thumbs) setThumbs(false);
-        return;
-      }
-
-      if (isTyping) return;
+        !!el && (el.matches('input, textarea, select') || el.isContentEditable || !!el.closest('[contenteditable="true"], [role="dialog"]'));
+      if (isTyping || (el && el !== document.body && !el.closest('#fb-wrap'))) return;
+      const shortcuts = ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'f', 'F', '+', '=', '-', '_', 'g', 'G', 't', 'T', 's', 'S', 'p', 'P'];
+      if (!shortcuts.includes(ev.key) || ev.repeat) return;
+      ev.preventDefault();
+      if (ev.key.toLowerCase() !== 'p') setPlaying(false);
 
       switch (ev.key) {
         case 'ArrowLeft':
@@ -427,11 +441,11 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           break;
         case '+':
         case '=':
-          setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)));
+          openZoom(pageRef.current, 1.5);
           break;
         case '-':
         case '_':
-          setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)));
+          openZoom(pageRef.current);
           break;
         case 'g':
         case 'G':
@@ -453,11 +467,11 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [prev, next, goTo, pages.length, zoomPage, searchOpen, tocOpen, thumbs, closeZoom]);
+  }, [prev, next, goTo, pages.length, zoomPage, searchOpen, tocOpen, thumbs, ready, openZoom]);
 
   // ---- Auto-play (lobby screen) ---------------------------------------------
-  useAutoFlip(playing, 9000, () => {
-    if (pageRef.current >= (pages.length || 1)) {
+  useAutoFlip(playing && ready && !zoomPage && !searchOpen && !tocOpen && !thumbs, 9000, () => {
+    if (visiblePageRange(pageRef.current, pages.length || 1, isPortrait).last >= pages.length) {
       goTo(1); // loop
     } else {
       next();
@@ -467,35 +481,46 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
   // Pause auto-play whenever the reader interacts manually.
   useEffect(() => {
     if (!playing) return;
-    const stop = () => setPlaying(false);
+    const stop = (event: PointerEvent) => {
+      // Do not switch the play toggle twice (pointer-down then click).
+      if (!(event.target instanceof Element && event.target.closest('[data-autoplay-toggle]'))) setPlaying(false);
+    };
     const wrap = document.getElementById('fb-wrap');
-    wrap?.addEventListener('mousedown', stop);
-    return () => wrap?.removeEventListener('mousedown', stop);
+    wrap?.addEventListener('pointerdown', stop);
+    return () => wrap?.removeEventListener('pointerdown', stop);
   }, [playing]);
 
   // ---- Copy link to this page -----------------------------------------------
   const copyLink = useCallback(async () => {
     try {
       const url = new URL(window.location.href);
+      if (editionId) url.pathname = `/read/${editionId}`;
       url.searchParams.set('page', String(pageRef.current));
       await navigator.clipboard.writeText(url.toString());
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1600);
     } catch {
-      // clipboard blocked — nothing we can do
+      setNotice('The link could not be copied. You can copy the page address from your browser.');
     }
-  }, []);
+  }, [editionId]);
 
   return (
     <MotionConfig reducedMotion="user">
+    <PageSources.Provider value={pages}>
     <div
       id="fb-wrap"
+      data-rendered-pages={completed}
+      data-page-count={numPages}
       role="region"
       aria-label={`${title} — issue reader`}
       aria-busy={!ready && !error}
       className="relative w-full h-[80vh] min-h-[440px] rounded-2xl overflow-hidden select-none border border-ink/15 bg-transparent"
     >
-      <SlowVideo src="/bg/595873_Drone_Landscape_Nature_1280x720.mp4" />
+      {ready && <SlowVideo
+        src="/bg/595873_Drone_Landscape_Nature_1280x720.mp4"
+        poster="/bg/595873_Drone_Landscape_Nature_1280x720.jpg"
+      />}
       <div className="absolute inset-0 z-0 bg-black/45" />
       {/* Reading progress hairline across the top of the reader */}
       <div
@@ -505,7 +530,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
         <motion.div
           className="h-full bg-accent origin-left"
           initial={false}
-          animate={{ scaleX: pages.length ? page / pages.length : 0 }}
+          animate={{ scaleX: numPages ? visible.last / numPages : 0 }}
           transition={springSoft}
         />
       </div>
@@ -520,13 +545,13 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       />
 
       <Toolbar
-        page={page}
-        pageCount={pages.length || 1}
+        page={visible.first}
+        lastVisiblePage={visible.last}
+        pageCount={numPages}
+        ready={ready}
         onPrev={prev}
         onNext={next}
-        zoom={zoom}
-        onZoomIn={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
-        onZoomOut={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))}
+        onZoom={() => openZoom(page, 1)}
         sound={sound}
         onToggleSound={() => setSound((s) => !s)}
         onToggleThumbs={() => setThumbs((t) => !t)}
@@ -550,7 +575,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       />
 
       <div
-        className={`w-full h-full flex items-center justify-center px-3 pt-14 ${
+        className={`relative z-[1] w-full h-full flex items-center justify-center px-3 pt-14 ${
           strip && pages.length > 2 ? 'pb-24' : 'pb-3'
         }`}
       >
@@ -562,7 +587,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
             <p className="text-ink/80 text-sm">{error}</p>
             <button
               type="button"
-              onClick={retry}
+              onClick={loadError ? retry : retryPages}
               className="mt-3 rounded-full bg-brand px-5 py-2 text-sm font-semibold text-paper hover:bg-brand-dark transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Try again
@@ -576,7 +601,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
                 ? `Downloading… ${Math.round(progress * 100)}%`
                 : loading || pages.length === 0
                   ? 'Loading the newspaper…'
-                  : `Rendering pages… ${pages.length}/${doc?.numPages ?? '?'}`}
+                  : `Preparing page ${page}…`}
             </p>
             {progress !== null && progress < 1 && (
               <div className="h-1.5 rounded-full bg-ink/10 overflow-hidden">
@@ -588,40 +613,20 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
             )}
           </div>
         )}
-        {ready && (
+        {ready && pageW > 0 && pageH > 0 && (
           <motion.div
             onDoubleClick={onBookDoubleClick}
             initial={false}
-            animate={mounted ? { opacity: 1 } : { opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ opacity: { duration: 0.4 } }}
             style={{ transformOrigin: '50% 100%' }}
           >
-          <HTMLFlipBook
+          <BookView
             key={`${pageW}x${pageH}x${isPortrait}x${bookEpoch}`}
-            ref={bookRef}
-            className=""
-            style={{}}
+            bookRef={bookRef}
             width={pageW}
             height={pageH}
-            size="fixed"
-            startPage={0}
-            minWidth={180}
-            maxWidth={2000}
-            minHeight={240}
-            maxHeight={2000}
-            startZIndex={2}
-            autoSize
-            mobileScrollSupport
-            clickEventForward
-            useMouseEvents
-            showPageCorners
-            disableFlipByClick={false}
-            showCover={true}
-            usePortrait={isPortrait}
-            drawShadow
-            flippingTime={750}
-            maxShadowOpacity={0.5}
-            swipeDistance={20}
+            isPortrait={isPortrait}
             onFlip={onFlip}
             onInit={onInit}
             onChangeState={onChangeState}
@@ -630,7 +635,7 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
                 newspaper) natively — no bookend pages, so everything
                 revealed mid-flip is a real page image. */}
             {bookChildren}
-          </HTMLFlipBook>
+          </BookView>
           </motion.div>
         )}
       </div>
@@ -642,11 +647,13 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
           onQueryChange={setQuery}
           onClose={() => setSearchOpen(false)}
           onGo={goTo}
+          pending={completed < numPages}
+          failed={failedPages.length > 0}
         />
       )}</AnimatePresence>
 
       <AnimatePresence>{tocOpen && (
-        <TocPanel items={toc} onClose={() => setTocOpen(false)} onGo={goTo} />
+        <TocPanel items={toc} pending={completed < numPages} onClose={() => setTocOpen(false)} onGo={goTo} />
       )}</AnimatePresence>
 
       <AnimatePresence>
@@ -664,90 +671,21 @@ export function Flipbook({ pdfUrl, title, editionId }: FlipbookProps) {
       {/* Filmstrip (toggleable from the toolbar; hidden while panels are open) */}
       <AnimatePresence>
         {strip && !thumbs && !searchOpen && !tocOpen && pages.length > 2 && (
-          <Filmstrip key="filmstrip" pages={pages} page={page} onGo={goTo} />
+          <Filmstrip key="filmstrip" pages={pages} page={visible.first} onGo={goTo} spread={!isPortrait} />
         )}
       </AnimatePresence>
 
-      {/* Google-Books style zoom overlay */}
-      <AnimatePresence>
-        {zoomPage && (
-        <motion.div
-          key="zoom"
-          ref={zoomDialogRef}
-          tabIndex={-1}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: { duration: 0.22 } }}
-          exit={{ opacity: 0, transition: { duration: 0.18 } }}
-          className="absolute inset-0 z-30 bg-[#ffffff] flex items-center justify-center touch-none"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Page ${zoomPage.n} zoomed`}
-          onDoubleClick={(e) => {
-            // Only the empty backdrop closes; a double-click on the page must
-            // reach the zoom toggle below (it used to bubble up and close).
-            if (e.target === e.currentTarget) closeZoom();
-          }}
-        >
-          <div className="absolute top-2 right-2 flex items-center gap-1">
-            <button
-              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
-              onClick={() => setZoomScale((s) => Math.min(4, +(s + 0.5).toFixed(1)))}
-              aria-label="Zoom in"
-            >
-              <ZoomIn size={18} />
-            </button>
-            <span className="text-ink/60 text-xs tabular-nums w-10 text-center">
-              {Math.round(zoomScale * 100)}%
-            </span>
-            <button
-              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
-              onClick={() => setZoomScale((s) => Math.max(0.5, +(s - 0.5).toFixed(1)))}
-              aria-label="Zoom out"
-            >
-              <ZoomOut size={18} />
-            </button>
-            <button
-              className="p-2 rounded-lg text-ink/80 hover:bg-ink/5"
-              onClick={closeZoom}
-              aria-label="Close zoom"
-            >
-              <X size={18} />
-            </button>
-          </div>
-          <div
-            className="overflow-auto nice-scroll max-w-full max-h-full p-4"
-            style={{ cursor: zoomScale > 1 ? 'grab' : 'default' }}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              setZoomScale((s) => (s > 1 ? 1 : 2));
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={zoomPage.url}
-              alt={`Page ${zoomPage.n} zoomed`}
-              draggable={false}
-              className="max-w-none shadow-2xl"
-              style={{
-                transform: `scale(${zoomScale}) translate(${zoomPan.x}px, ${zoomPan.y}px)`,
-                transformOrigin: 'top left',
-              }}
-              onWheel={(e) => {
-                if (!e.ctrlKey) return;
-                e.preventDefault();
-                setZoomScale((s) => Math.min(4, Math.max(0.5, +(s - Math.sign(e.deltaY) * 0.25).toFixed(2))));
-              }}
-            />
-          </div>
-          {zoomLoading && (
-            <p className="absolute bottom-4 text-ink/60 text-xs animate-pulse">Loading hi-res…</p>
-          )}
-          <p className="absolute top-3 left-3 text-ink/50 text-xs">
-            Page {zoomPage.n} · double-click to toggle zoom · Ctrl+scroll to zoom · Esc to close
-          </p>
-        </motion.div>
-        )}
-      </AnimatePresence>
+      {zoomPage && (doc || usePreviews) && <PageZoom key={zoomPage.n} doc={doc} page={zoomPage.n} preview={pages[zoomPage.n - 1]} aspect={aspect || 0.75} initialScale={zoomPage.scale} onClose={closeZoom} />}
+    </div>
+    </PageSources.Provider>
+    <div className="mt-4 rounded-xl border border-ink/15 bg-white p-4 text-sm">
+      <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand underline">Open or download the original PDF</a>
+      {notice && <p role="status" className="mt-2">{notice}</p>}
+      {failedPages.length > 0 && <p role="status" className="mt-2">Some pages could not be displayed. <button type="button" onClick={retryPages} className="font-semibold text-brand underline">Retry the pages</button> or use the original PDF.</p>}
+      <details className="mt-3">
+        <summary className="cursor-pointer font-semibold">Read page {page} as text</summary>
+        <p className="mt-3 whitespace-pre-wrap leading-relaxed select-text">{texts[page - 1] || 'No selectable text is available on this page. Open the original PDF for other reading options.'}</p>
+      </details>
     </div>
     </MotionConfig>
   );

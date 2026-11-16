@@ -13,7 +13,15 @@ export function useAutoFlip(playing: boolean, intervalMs: number, onTick: () => 
 
   useEffect(() => {
     if (!playing) return;
-    const id = window.setInterval(() => tickRef.current(), intervalMs);
-    return () => window.clearInterval(id);
+    let id: number | undefined;
+    const update = () => {
+      window.clearInterval(id);
+      // Restart the reading interval after returning to the tab; never turn
+      // pages in the background or immediately upon becoming visible.
+      if (!document.hidden) id = window.setInterval(() => tickRef.current(), intervalMs);
+    };
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', update); };
   }, [playing, intervalMs]);
 }

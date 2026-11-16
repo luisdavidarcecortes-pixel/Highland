@@ -1,57 +1,38 @@
 import 'server-only';
-
+import { cache } from 'react';
 import type { Edition } from './types';
 import { DEMO_EDITIONS } from './demo-data';
 import { isDemoMode } from './demo';
+import { protectedMediaUrl } from './media';
 import { getSupabaseServerClient, getSupabaseAnonClient } from './supabase-server';
 
-/** Published issues, newest first. Public pages never send the visitor's JWT. */
-export async function getPublishedEditions(): Promise<Edition[]> {
-  if (isDemoMode()) return DEMO_EDITIONS.filter((e) => e.published);
-  const supabase = getSupabaseAnonClient() ?? getSupabaseServerClient();
-  if (!supabase) return [];
-  try {
-    const { data, error } = await supabase
-      .from('editions')
-      .select('*')
-      .eq('published', true)
-      .order('edition_date', { ascending: false });
-    if (error) throw new Error(error.message);
-    return (data ?? []) as Edition[];
-  } catch {
-    // A broken session (e.g. clock skew: "JWT issued at future") must never
-    // crash a public page — render it empty instead.
-    return [];
-  }
+function protect(row: Edition & { pdf_path?: string; cover_path?: string }): Edition { return { ...row, pdf_url: protectedMediaUrl(row.pdf_url, row.pdf_path)!, cover_url: protectedMediaUrl(row.cover_url, row.cover_path) }; }
+function unavailable(error: unknown): never {
+  console.error('[data-editions] database read failed:', error);
+  throw new Error('The newspaper service is temporarily unavailable. Please try again.');
 }
-
-/** Todas las ediciones (incluye borradores). Solo para el panel admin. */
+export const getPublishedEditions = cache(async (): Promise<Edition[]> => {
+  if (isDemoMode()) return DEMO_EDITIONS.filter(row => row.published);
+  const supabase = getSupabaseAnonClient();
+  if (!supabase) return unavailable('Missing database configuration');
+  const { data, error } = await supabase.from('editions').select('*').eq('published', true).order('edition_date', { ascending: false });
+  if (error) return unavailable(error.message);
+  return (data ?? []).map(protect);
+});
 export async function getAllEditions(): Promise<Edition[]> {
   if (isDemoMode()) return DEMO_EDITIONS;
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from('editions')
-    .select('*')
-    .order('edition_date', { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Edition[];
+  const supabase = await getSupabaseServerClient();
+  if (!supabase) return unavailable('Missing database configuration');
+  const { data, error } = await supabase.from('editions').select('*').order('edition_date', { ascending: false });
+  if (error) return unavailable(error.message);
+  return (data ?? []).map(protect);
 }
-
-export async function getEditionById(id: string): Promise<Edition | null> {
-  if (isDemoMode()) return DEMO_EDITIONS.find((e) => e.id === id) ?? null;
-  const supabase = getSupabaseAnonClient() ?? getSupabaseServerClient();
-  if (!supabase) return null;
-  try {
-    const { data, error } = await supabase
-      .from('editions')
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    return (data as Edition | null) ?? null;
-  } catch {
-    // Clock-skew or session errors must not crash the reader page.
-    return null;
-  }
-}
+export const getEditionById = cache(async (id: string): Promise<Edition | null> => {
+  if (isDemoMode()) return DEMO_EDITIONS.find(row => row.id === id) ?? null;
+  if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)) return null;
+  const supabase = getSupabaseAnonClient();
+  if (!supabase) return unavailable('Missing database configuration');
+  const { data, error } = await supabase.from('editions').select('*').eq('id', id).eq('published', true).maybeSingle();
+  if (error) return unavailable(error.message);
+  return data ? protect(data) : null;
+});

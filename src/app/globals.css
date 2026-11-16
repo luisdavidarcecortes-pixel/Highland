@@ -3,16 +3,12 @@
 @tailwind utilities;
 
 :root {
-  --paper: #eaf4f5;
-  --ink: #171e55;
-  --night: #171e55;
-  --surface: #1d2b5c;
-  --surface-raised: #203f67;
-  --palette-indigo: #2f39a9;
-  --palette-blue: #2e6fa0;
-  --palette-cyan: #49a4bb;
-  --palette-turquoise: #00713f;
-  --border: rgba(73, 164, 187, 0.2);
+  --paper: #f6f3eb;
+  --ink: #20372e;
+  --night: #10251e;
+  --surface: #fffefa;
+  --surface-raised: #eeeadf;
+  --border: rgba(32,55,46,.14);
 }
 
 html {
@@ -20,500 +16,879 @@ html {
 }
 
 body {
-  background-color: #f5f1e8;
-  color: #1c3035;
-  font-family: var(--font-poppins), system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-poppins),system-ui,sans-serif;
 }
 
-body:has(.public-page) {
-  --public-paper: #f5f1e8;
-  --public-surface: #fffdf8;
-  --public-surface-alt: #eae4d9;
-  --public-ink: #1c3035;
-  --public-muted: #5e6d6e;
-  --public-accent: #a44136;
-  --public-green: #00713f;
-  --public-green-dark: #005a33;
-  --public-green-wash: rgba(0, 113, 63, 0.07);
-  --public-border: rgba(28, 48, 53, 0.15);
-  background-color: var(--public-paper);
-  background-image:
-    radial-gradient(ellipse 60% 38% at 8% 0%, rgba(164, 65, 54, 0.045), transparent 75%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.32), transparent 42%);
-  color: var(--public-ink);
+::-moz-selection {
+  background: #cfe4d4;
+  color: #102f23;
 }
 
-body:has(.public-page) .public-background {
-  display: none;
+::selection {
+  background: #cfe4d4;
+  color: #102f23;
 }
 
-body:has(.public-page) .site-header {
-  background-color: rgba(250, 248, 242, 0.96);
-  border-bottom: 1px solid var(--public-border);
+a,button,input,select,textarea {
+  -webkit-tap-highlight-color: transparent;
 }
 
-body:has(.public-page) .site-header .bg-paper {
-  background-color: var(--public-surface);
+button {
+  touch-action: manipulation;
 }
 
-body:has(.public-page) .site-header .text-ink {
-  color: var(--public-ink);
+button:disabled {
+  cursor: not-allowed;
 }
 
-body:has(.public-page) .site-header [class*="text-ink/"] {
-  color: var(--public-muted);
+input,select,textarea {
+  max-width: 100%;
+  accent-color: #166344;
+  background: #fffefa;
+  color: var(--ink);
 }
 
-body:has(.public-page) .site-header .text-brand,
-body:has(.public-page) .site-header .text-accent {
-  color: var(--public-green);
+input::-moz-placeholder,textarea::-moz-placeholder {
+  color: #637165;
 }
 
-body:has(.public-page) .site-header [class*="border-ink"] {
-  border-color: var(--public-border);
+input::placeholder,textarea::placeholder {
+  color: #637165;
 }
 
-body:has(.public-page) .site-header [alt="The Highlander"] {
-  filter: none;
+/* Muted text on paper.
+   The raw alpha of the ink colour drops below the WCAG AA contrast, and a
+   blanket rule also collapsed every step into the same grey. These values keep
+   the hierarchy (each step is visibly darker) and stay readable. */
+.public-page .text-ink\/40 { color: #7f8c83; }
+.public-page .text-ink\/50 { color: #67766c; }
+.public-page .text-ink\/60 { color: #617064; }
+.public-page .text-ink\/70 { color: #55655b; }
+.public-page .text-ink\/75 { color: #4f5f55; }
+.public-page .text-ink\/80 { color: #47574d; }
+
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible {
+  outline: 3px solid #398963;
+  outline-offset: 3px;
 }
 
-body:has(.public-page) .site-header [alt="Highland Academy"] {
-  filter: brightness(0);
-  opacity: 0.78;
+.masthead {
+  font-family: Georgia,Times New Roman,serif;
+  letter-spacing: -.035em;
+  text-wrap: balance;
 }
 
-body:has(.public-page) .public-page [class~="text-ink"] {
-  color: var(--public-ink);
-}
-
-body:has(.public-page) .public-page [class*="text-ink/"] {
-  color: var(--public-muted);
-}
-
-body:has(.public-page) .public-page .bg-white {
-  background-color: var(--public-surface);
-}
-
-body:has(.public-page) .public-page .bg-paper {
-  background-color: var(--public-surface-alt);
-}
-
-body:has(.public-page) .public-page [class*="border-ink"] {
-  border-color: var(--public-border);
-}
-
-body:has(.public-page) .public-page .bg-brand {
-  background-color: var(--public-green);
-  color: #fffdf8;
-}
-
-body:has(.public-page) .public-page [class*="hover:bg-brand-dark"]:hover {
-  background-color: var(--public-green-dark);
-}
-
-body:has(.public-page) .public-page .text-brand {
-  color: var(--public-green);
-}
-
-body:has(.public-page) .site-header [class*="hover:text-brand"]:hover,
-body:has(.public-page) .public-page [class*="hover:text-brand"]:hover {
-  color: var(--public-green-dark);
-}
-
-body:has(.public-page) .public-page .public-card {
-  background-color: var(--public-surface);
-  background-image: none;
-  box-shadow: 0 12px 30px -24px rgba(28, 48, 53, 0.42);
-  transition:
-    transform 240ms ease,
-    border-color 240ms ease,
-    box-shadow 240ms ease;
-}
-
-body:has(.public-page) .public-page a.public-card:hover,
-body:has(.public-page) .public-page article.public-card:hover {
-  transform: translateY(-3px);
-  border-color: rgba(164, 65, 54, 0.38);
-  box-shadow: 0 18px 36px -24px rgba(28, 48, 53, 0.5);
-}
-
-body:has(.public-page) .public-page .public-card img {
-  transition: transform 360ms ease;
-}
-
-body:has(.public-page) .public-page .public-card:hover img {
-  transform: scale(1.025);
-}
-
-body:has(.public-page) .masthead {
-  font-family: Georgia, 'Times New Roman', serif;
-  letter-spacing: -0.035em;
-}
-
-body:has(.public-page) .editorial-kicker {
-  color: var(--public-green);
-  font-size: 0.72rem;
+.editorial-kicker {
+  color: #166344;
+  font-size: .68rem;
+  line-height: 1.6;
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: .17em;
   text-transform: uppercase;
 }
 
-body:has(.public-page) .editorial-rule {
-  border-top: 3px double var(--public-ink);
+.editorial-rule {
+  border-top: 1px solid #20372e;
+  padding-top: 1rem;
 }
 
-body:has(.public-page) .public-feature {
-  background:
-    linear-gradient(120deg, var(--public-green-wash), transparent 48%),
-    var(--public-surface);
-  border-color: var(--public-border);
-  box-shadow: 0 24px 60px -42px rgba(28, 48, 53, 0.48);
+.rule-double {
+  border-top: 3px double #b3beb1;
 }
 
-body:has(.public-page) .site-footer {
-  background-color: #00713f;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fffdf8;
+.public-page {
+  width: 100%;
 }
 
-body:has(.public-page) .reveal {
-  transform: translateY(22px) scale(0.99);
-  transition:
-    opacity 760ms cubic-bezier(0.2, 0.75, 0.25, 1),
-    transform 760ms cubic-bezier(0.2, 0.75, 0.25, 1);
+.site-header {
+  background: #fffefa;
+  border-top: 4px solid #166344;
+  border-bottom: 1px solid var(--border);
+  view-transition-name: site-header;
 }
 
-body:has(.public-page) .reveal.is-visible {
-  transform: translateY(0) scale(1);
+.site-header [alt="Highland Academy"] {
+  filter: brightness(0) saturate(100%);
+  opacity: .68;
 }
 
-body:has(.public-page) .public-page .prose {
-  --tw-prose-body: var(--public-ink);
-  --tw-prose-headings: var(--public-ink);
-  --tw-prose-bold: var(--public-ink);
-  --tw-prose-links: var(--public-accent);
-  --tw-prose-bullets: var(--public-accent);
-  --tw-prose-counters: var(--public-accent);
-  --tw-prose-hr: var(--public-border);
-  --tw-prose-quotes: var(--public-ink);
-  --tw-prose-quote-borders: var(--public-accent);
-  --tw-prose-captions: var(--public-muted);
-  --tw-prose-code: var(--public-ink);
-  --tw-prose-pre-bg: var(--public-surface-alt);
+.site-header [alt="The Highlander"] {
+  max-width: 100%;
+  height: auto;
 }
 
-/* ---------- Admin panel: paper cards and light fields -------------------- */
-/* The admin lives on the public paper shell, so the dark glass surfaces and
-   dark inputs from the global styles must yield to light, readable ones. */
-body:has(.public-page) .admin-shell .panel {
-  background-color: var(--public-surface);
-  border: 1px solid var(--public-border);
-  box-shadow: 0 12px 30px -24px rgba(28, 48, 53, 0.42);
+.site-footer {
+  background: #163d2e;
+  color: #fffefa;
+  view-transition-name: site-footer;
 }
 
-body:has(.public-page) .admin-shell input:not([type='file']),
-body:has(.public-page) .admin-shell textarea,
-body:has(.public-page) .admin-shell select {
-  background-color: #fffdf8;
-  color: var(--public-ink);
-  box-shadow: inset 0 1px 0 rgba(28, 48, 53, 0.06);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
+.public-card {
+  background: #fffefa;
+  box-shadow: 0 5px 18px -15px #20372e66;
+  transition: transform .2s,border-color .2s,box-shadow .2s;
 }
 
-body:has(.public-page) .admin-shell input::placeholder,
-body:has(.public-page) .admin-shell textarea::placeholder {
-  color: rgba(28, 48, 53, 0.42);
+a.public-card:hover,article.public-card:hover {
+  transform: translateY(-4px);
+  border-color: #73977f;
+  box-shadow: 0 16px 32px -24px #20372e99;
 }
 
-body:has(.public-page) .admin-shell input:not([type='file']):focus,
-body:has(.public-page) .admin-shell textarea:focus,
-body:has(.public-page) .admin-shell select:focus {
-  outline: 2px solid var(--public-green);
-  outline-offset: 1px;
-  border-color: var(--public-green);
+.public-card img {
+  transition: transform .35s;
 }
 
-body:has(.public-page) .admin-shell .panel-note {
-  background-color: var(--public-green-wash);
-  border: 1px solid rgba(0, 113, 63, 0.22);
-  color: var(--public-ink);
+.public-card:hover img {
+  transform: scale(1.025);
 }
 
-body .bg-white {
-  background-color: var(--surface);
+.public-card h3 {
+  font-size: 1.35rem;
 }
 
-body .bg-paper {
-  background-color: var(--surface-raised);
+.public-card p {
+  line-height: 1.7;
 }
 
-body .text-brand,
-body .text-accent {
-  color: var(--palette-turquoise);
+.public-card>div:last-child {
+  padding: 1.35rem;
 }
 
-body .text-brand-light {
-  color: var(--palette-cyan);
+.public-feature {
+  background: #e9eee4;
+  border: 1px solid var(--border);
 }
 
-body .text-ink {
-  color: var(--paper);
+.home-page .public-feature {
+  background: #174b36;
+  color: #fffefa;
+  border: 0;
+  box-shadow: 0 24px 60px -40px #17372c88;
 }
 
-body [class*="text-ink/"] {
-  color: rgba(234, 244, 245, 0.72);
+.home-page .public-feature .editorial-kicker {
+  display: inline-flex;
+  border: 1px solid #ffffff40;
+  border-radius: 999px;
+  padding: .35rem .8rem;
+  color: #d9eac9;
 }
 
-body [class*="border-ink"] {
-  border-color: var(--border);
+.home-page .public-feature [class*="text-ink/"] {
+  color: #e0eade;
 }
 
-body input,
-body textarea,
-body select {
-  color: var(--paper);
-  background-color: var(--surface);
-  border-color: var(--border);
+.home-page .public-feature .text-ink {
+  color: #fffefa;
 }
 
-body input::placeholder,
-body textarea::placeholder {
-  color: rgba(234, 244, 245, 0.48);
+.home-page .public-feature .bg-brand {
+  background: #f2eedf;
+  color: #194b37;
 }
 
-body input:focus,
-body textarea:focus,
-body select:focus {
-  outline-color: var(--palette-cyan);
+.home-page .public-feature .bg-brand:hover {
+  background: white;
 }
 
-/* Deliberately no `filter` on the reveal: a filter on an ancestor becomes the
-   backdrop root for everything inside it, so any glass surface nested in a
-   revealed card would sample an empty backdrop instead of the page behind it
-   and render as a dull tinted panel. Opacity and transform carry the entrance
-   on their own and neither of them breaks the backdrop chain once they settle. */
+.home-page .public-feature [class*="border-ink/"] {
+  border-color: #ffffff55;
+}
+
+.home-page .public-feature a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.home-page .feature-cover {
+  background: #f5f1e8;
+  padding: .6rem;
+  box-shadow: 0 16px 35px #09291e66;
+  transform: rotate(2deg);
+}
+
+.home-page .feature-cover:hover {
+  transform: rotate(0);
+}
+
+.home-intro {
+  display: grid;
+  gap: 1rem;
+}
+
+.home-intro h1 {
+  max-width: 780px;
+}
+
+.public-page .prose {
+  font-family: Georgia,Times New Roman,serif;
+  font-size: 1.22rem;
+  line-height: 1.85;
+  color: #314239;
+}
+
+.article-deck {
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: #5c6d61;
+}
+
 .reveal {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal:not(.is-visible) {
   opacity: 0;
-  transform: translateY(18px);
-  transition:
-    opacity 0.6s ease,
-    transform 0.6s ease;
-  will-change: opacity, transform;
+  transform: translateY(12px);
 }
 
 .reveal.is-visible {
   opacity: 1;
+  transform: none;
+  transition: opacity .35s ease,transform .35s ease;
+}
+
+/* Page-to-page transitions (View Transitions API). */
+@keyframes page-leave {
+  to { opacity: 0; }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+::view-transition-old(root) {
+  animation: page-leave .22s ease both;
+}
+
+::view-transition-new(root) {
+  animation: page-enter .38s cubic-bezier(.22,1,.36,1) both;
+}
+
+/* Atropos clips its inner layer to build the 3D plane; letting it overflow
+   keeps the card shadows that already live on .public-card / .feature-cover. */
+.tilt-surface .atropos-inner {
+  overflow: visible;
+}
+
+/* A tilted card may reach its neighbour: it is painted on top while it is
+   being looked at. */
+.tilt-surface {
+  position: relative;
+}
+
+.tilt-surface:hover,
+.tilt-surface:focus-within {
+  z-index: 3;
+}
+
+/* Headline entrance. The hidden state only exists when JavaScript is on, so
+   the server always delivers readable text. */
+.text-reveal-line {
+  display: block;
+}
+
+.js .text-reveal:not(.is-inview) .text-reveal-line {
+  opacity: 0;
+  transform: translateY(18px);
+}
+
+.js .text-reveal.is-inview .text-reveal-line {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity .6s cubic-bezier(.22,1,.36,1),
+    transform .6s cubic-bezier(.22,1,.36,1);
+  transition-delay: calc(var(--line-index, 0) * var(--reveal-stagger, 90ms));
+}
+
+.draft-badge,.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #eceee8;
+  color: #536050;
+  font-size: .65rem;
+  line-height: 1.5;
+  font-weight: 600;
+  padding: .3rem .65rem;
+}
+
+.status-live {
+  color: #166344;
+  background: #e5f1e9;
+}
+
+.status-pending {
+  color: #87541b;
+  background: #f8eed7;
+}
+
+body:has(.admin-shell) {
+  background: #f1f3ee;
+}
+
+body:has(.admin-shell) .site-footer,body:has(.admin-shell) .site-header {
+  display: none;
+}
+
+.admin-workspace {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 238px minmax(0,1fr);
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1.1rem;
+  background: rgba(255,254,250,.72);
+  border-right: 1px solid var(--border);
+}
+
+.admin-wordmark {
+  display: flex;
+  gap: .65rem;
+  align-items: center;
+  padding: 0 .35rem;
+  font-family: Georgia,serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.admin-wordmark small {
+  display: block;
+  font: 500 .5rem var(--font-poppins),sans-serif;
+  letter-spacing: .14em;
+  color: #6a786e;
+  margin-top: .3rem;
+}
+
+.admin-mark {
+  display: grid;
+  place-items: center;
+  background: #174b36;
+  color: #fffefa;
+  border-radius: .6rem;
+  width: 40px;
+  height: 44px;
+  font-size: 1.8rem;
+}
+
+.admin-nav-label {
+  margin: 3rem .75rem .8rem;
+  color: #7b867c;
+  font-size: .6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .15em;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+.admin-nav a {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .8rem;
+  font-size: .8rem;
+  font-weight: 500;
+  border-radius: .65rem;
+  color: #637167;
+  transition: background .15s,color .15s;
+}
+
+.admin-nav a:hover {
+  background: #f0f3ec;
+  color: #174b36;
+}
+
+.admin-nav a[aria-current=page] {
+  background: #e6eee4;
+  color: #174b36;
+  font-weight: 700;
+}
+
+.admin-sidebar-bottom {
+  margin-top: auto;
+  padding: 2rem .75rem 0;
+}
+
+.admin-content {
+  max-width: 1560px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.7rem clamp(1.2rem,3vw,3.5rem) 4rem;
+}
+
+.admin-page-heading {
+  margin-bottom: 2rem;
+}
+
+.admin-page-heading h1 {
+  font-size: clamp(1.8rem,3vw,2.25rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -.045em;
+  margin: .65rem 0;
+}
+
+.admin-page-heading>p:last-of-type {
+  color: #6b796d;
+  font-size: .85rem;
+}
+
+.admin-shell .panel {
+  background: rgba(255,254,250,.84);
+  border: 1px solid #dce3d8;
+  box-shadow: 0 2px 5px #20372e03;
+}
+
+.admin-shell form.panel {
+  padding: 1.5rem;
+  border-radius: 1rem;
+}
+
+.admin-shell .masthead {
+  font-family: var(--font-poppins),sans-serif;
+  letter-spacing: -.025em;
+}
+
+.admin-shell .editorial-rule {
+  border-top: 0;
+}
+
+.admin-shell label {
+  color: #435447;
+}
+
+.admin-shell input:not([type=file]):not([type=checkbox]),.admin-shell select,.admin-shell textarea {
+  background: #fffefa;
+  border-color: #d4dfd1;
+  border-radius: .55rem;
+  min-height: 42px;
+}
+
+.admin-shell input:not([type=checkbox]),.admin-shell select,.admin-shell textarea {
+  font-size: .85rem;
+}
+
+.admin-shell :where(input,textarea,select):focus-visible {
+  outline: 2px solid #4b9067;
+  outline-offset: 1px;
+}
+
+.admin-input {
+  display: block;
+  width: 100%;
+  padding: .7rem .85rem;
+  border: 1px solid #d4dfd1;
+}
+
+.admin-primary,.admin-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  border-radius: .6rem;
+  padding: .7rem 1.15rem;
+  font-size: .8rem;
+  font-weight: 600;
+  transition: background .15s;
+}
+
+.admin-primary {
+  background: #166344;
+  color: #fffefa;
+}
+
+.admin-primary:hover {
+  background: #104b34;
+}
+
+.admin-secondary {
+  border: 1px solid #cfdbcb;
+  background: #fffefa;
+  color: #27543b;
+}
+
+.admin-secondary:hover {
+  background: #eef3e9;
+}
+
+.admin-primary:disabled,.admin-secondary:disabled {
+  opacity: .45;
+}
+
+.admin-shell button.bg-brand {
+  border-radius: .6rem;
+  font-size: .85rem;
+}
+
+.panel-note {
+  border: 1px solid #ceddc7;
+  background: #edf3e8;
+  color: #38543b;
+  line-height: 1.7;
+}
+
+.admin-welcome {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  overflow: hidden;
+  background: #174b36;
+  color: #fffefa;
+  border-radius: 1rem;
+  padding: clamp(1.5rem,3vw,2.5rem);
+}
+
+.admin-welcome>div {
+  position: relative;
+  z-index: 1;
+  max-width: 580px;
+}
+
+.admin-welcome h2 {
+  margin-top: .8rem;
+  font-family: Georgia,serif;
+  font-size: clamp(2rem,3.8vw,3rem);
+  letter-spacing: -.03em;
+  line-height: 1.1;
+}
+
+.admin-welcome p:not(:first-child) {
+  font-size: .85rem;
+  line-height: 1.8;
+  margin-top: .9rem;
+  color: #dce6d4;
+}
+
+.admin-welcome a {
+  display: inline-flex;
+  align-items: center;
+  gap: .6rem;
+  background: #f2eedf;
+  color: #174b36;
+  border-radius: .55rem;
+  padding: .8rem 1rem;
+  font-weight: 600;
+  font-size: .8rem;
+  margin-top: 1.5rem;
+}
+
+.admin-welcome-letter {
+  font: italic 200px/.8 Georgia,serif;
+  color: #ffffff0d;
+  position: absolute;
+  right: 2rem;
+  bottom: -1rem;
+  pointer-events: none;
+}
+
+.admin-stat {
+  border-radius: 1rem;
+  padding: 1.5rem;
+}
+
+.admin-stat strong {
+  display: block;
+  font-size: 2rem;
+  font-weight: 600;
+  margin-top: .8rem;
+  letter-spacing: -.04em;
+}
+
+.admin-stat p {
+  font-size: .75rem;
+  color: #6a786a;
+  margin-top: .15rem;
+}
+
+.admin-shortcut {
+  border-radius: 1rem;
+  padding: 1.7rem;
+  transition: border-color .15s;
+}
+
+.admin-shortcut:hover {
+  border-color: #80a780;
+}
+
+.admin-shortcut h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 1rem;
+}
+
+.admin-shortcut p {
+  font-size: .8rem;
+  line-height: 1.8;
+  color: #6a786a;
+  margin-top: .6rem;
+  max-width: 400px;
+}
+
+.admin-shortcut span {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  color: #166344;
+  font-size: .75rem;
+  font-weight: 600;
+  margin-top: 1.2rem;
+}
+
+.admin-login {
+  min-height: 100vh;
+  padding: 3rem 0;
+  background: radial-gradient(ellipse at 20% 20%,rgba(227,234,219,.5),transparent 60%);
+}
+
+.admin-login .masthead {
+  font-family: Georgia,serif;
+}
+
+.admin-manager-grid {
+  grid-template-columns: minmax(0,1fr);
+  align-items: start;
+}
+
+.admin-shell li.panel {
+  box-shadow: none;
+}
+
+.admin-shell li.panel>div.flex-1 {
+  min-width: 110px;
+}
+
+.admin-shell li.panel .truncate {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.admin-shell li.panel button {
+  min-width: 36px;
+  min-height: 36px;
+  flex-shrink: 0;
+}
+
+@media (min-width:1280px) {
+  .admin-manager-grid {
+    grid-template-columns: 330px minmax(0,1fr);
+  }
+}
+
+@media (min-width:768px) {
+  .home-intro {
+    grid-template-columns: 1.6fr 1fr;
+    align-items: end;
+  }
+}
+
+@media (max-width:900px) {
+  .admin-workspace {
+    grid-template-columns: minmax(0,1fr);
+  }
+  .admin-sidebar {
+    position: static;
+    height: auto;
+    padding: 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-wordmark {
+    font-size: 1rem;
+  }
+  .admin-nav-label {
+    display: none;
+  }
+  .admin-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    margin-top: 1rem;
+    padding-bottom: .2rem;
+  }
+  .admin-nav a {
+    white-space: nowrap;
+    padding: .65rem .85rem;
+    font-size: .72rem;
+  }
+  .admin-nav svg {
+    width: 16px;
+  }
+  .admin-sidebar-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .7rem .4rem 0;
+    margin-top: .5rem;
+  }
+  .admin-sidebar-bottom>div {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+  }
+  .admin-sidebar-bottom>div>p {
+    display: none;
+  }
+  .admin-sidebar-bottom>div>div {
+    margin: 0;
+  }
+  .admin-content {
+    padding-top: 1.7rem;
+  }
+}
+
+@media (max-width:480px) {
+  .admin-content {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .admin-shell form.panel {
+    padding: 1.1rem;
+  }
+  .admin-shell li.panel:not(.team-member) {
+    gap: .4rem;
+    padding: .75rem;
+    flex-wrap: wrap;
+  }
+  .admin-shell li.panel:not(.team-member)>div.flex-1 {
+    flex-basis: calc(100% - 60px);
+  }
+  .admin-shell .team-member>div.flex-1 {
+    min-width: calc(100% - 70px);
+  }
+  .admin-shell .team-member select {
+    margin-left: 3.25rem;
+    flex: 1;
+  }
+  .public-card>div:last-child {
+    padding: 1rem;
+  }
+  .public-card h3 {
+    font-size: 1.1rem;
+  }
+  .public-card p {
+    font-size: .75rem;
+  }
+}
+
+.nice-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.nice-scroll::-webkit-scrollbar-thumb {
+  background: #6e837777;
+  border-radius: 999px;
+}
+
+#fb-wrap .stf__hardInnerShadow,#fb-wrap .stf__hardShadow,#fb-wrap .stf__innerShadow,#fb-wrap .stf__outerShadow {
+  z-index: 6 !important;
+}
+
+#fb-wrap {
+  box-shadow: 0 18px 45px -30px #132f2466;
+}
+
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: 1rem;
+  z-index: 100;
+  padding: .7rem 1.2rem;
+  border-radius: .6rem;
+  color: white;
+  background: #166344;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
   transform: translateY(0);
 }
 
-/* Discrete scrollbar inside the reader */
-.nice-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-.nice-scroll::-webkit-scrollbar-thumb {
-  background: rgba(51, 51, 51, 0.25);
-  border-radius: 999px;
-}
-.nice-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* Masthead-style section title */
-.masthead {
-  font-family: var(--font-poppins), system-ui, sans-serif;
-  letter-spacing: -0.02em;
-}
-
-/* Newspaper-style separator line */
-.rule-double {
-  border-top: 3px double var(--palette-blue);
-}
-
-/* Badge for drafts uses subtle shades from the site palette. */
-.draft-badge {
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(46, 111, 160, 0.16),
-    rgba(46, 111, 160, 0.16) 10px,
-    rgba(47, 57, 169, 0.1) 10px,
-    rgba(47, 57, 169, 0.1) 20px
-  );
+@media (prefers-reduced-motion:reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .home-page .feature-cover,.public-card,.public-card img,.public-card:hover,.public-card:hover img,.reveal,.reveal:not(.is-visible) {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .stf__parent {
+    transition: none !important;
+  }
+  ::view-transition-old(root),::view-transition-new(root) {
+    animation: none !important;
+  }
+  .js .text-reveal .text-reveal-line {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .tilt-surface,.tilt-surface .atropos-rotate,.tilt-surface .atropos-scale {
+    transform: none !important;
+  }
 }
 
-/* ---------- Liquid glass --------------------------------------------------
-   Three rungs, styled bottom-up, so a surface is never invisible and never
-   unreadable:
-     1. default          opaque tinted panel, no filters at all — this is the
-                         whole product for reduced-transparency users.
-     2. @supports        frosted glass in every engine with backdrop-filter.
-     3. Chromium only    real refraction, applied from JS. It cannot use
-                         @supports: Firefox parses `backdrop-filter: url(...)`
-                         as valid, passes the check, and then paints nothing.
-   Blur stays static and under 20px: animating the radius re-composites
-   everything behind the surface on every single frame. */
 :root {
-  --lg-tint: rgba(13, 27, 46, 0.44);
-  --lg-tint-solid: rgba(10, 21, 36, 0.9);
-  --lg-dark-tint: rgba(9, 19, 34, 0.74);
-  --lg-dark-solid: rgba(9, 19, 34, 0.94);
-  --lg-rim: rgba(255, 255, 255, 0.3);
-  --lg-rim-soft: rgba(255, 255, 255, 0.12);
-  --lg-shadow: 0 26px 60px -36px rgba(0, 0, 0, 0.95);
+  --lg-tint: rgba(13,27,46,0.44);
+  --lg-tint-solid: rgba(10,21,36,0.9);
+  --lg-dark-tint: rgba(9,19,34,0.74);
+  --lg-dark-solid: rgba(9,19,34,0.94);
+  --lg-rim: rgba(255,255,255,0.3);
+  --lg-rim-soft: rgba(255,255,255,0.12);
+  --lg-shadow: 0 26px 60px -36px rgba(0,0,0,0.95);
 }
 
 .lg-glass {
   background-color: var(--lg-tint-solid);
-  box-shadow:
-    inset 0 1px 0 var(--lg-rim-soft),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
-    var(--lg-shadow);
+  box-shadow: inset 0 1px 0 var(--lg-rim-soft),inset 0 -1px 0 rgba(255,255,255,.05),var(--lg-shadow);
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   .lg-glass {
     background-color: var(--lg-tint);
-    -webkit-backdrop-filter: blur(14px) saturate(180%);
     backdrop-filter: blur(14px) saturate(180%);
-    box-shadow:
-      inset 0 1px 0 var(--lg-rim),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-      var(--lg-shadow);
+    box-shadow: inset 0 1px 0 var(--lg-rim),inset 0 -1px 0 rgba(255,255,255,.06),var(--lg-shadow);
   }
 }
 
-/* Reader chrome sits over the newspaper itself, whose pages are white. At the
-   standard tint the light labels drop to about 2.5:1, so this variant carries
-   a much heavier tint and keeps them above 4.5:1 no matter which page is
-   scrolled underneath. */
 .lg-glass-dark {
   background-color: var(--lg-dark-solid);
 }
 
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+@supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   .lg-glass-dark {
     background-color: var(--lg-dark-tint);
   }
 }
 
-/* The user explicitly asked for less transparency: drop the filters entirely.
-   Expressed as a negation so engines that do not implement the feature keep
-   their glass instead of silently falling back to the bare panel. */
-@media (prefers-reduced-transparency: reduce) {
+@media (prefers-reduced-transparency:reduce) {
   .lg-glass {
     background-color: var(--lg-tint-solid);
-    -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-
   .lg-glass-dark {
     background-color: var(--lg-dark-solid);
   }
-}
-
-/* ---------- Glass rectangles and fields ---------------------------------- */
-
-/* Cards on the public pages are also styled by the page shell further up, which
-   paints its own fill and shadow. Re-assert the glass at a specificity that
-   wins, so a glass card is never flattened into a plain panel over the video it
-   is supposed to refract. */
-body:has(.public-page) .public-page .lg-glass.public-card,
-body:has(.public-page) .public-page .lg-glass.public-card:hover {
-  background-image: none;
-  box-shadow:
-    inset 0 1px 0 var(--lg-rim),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.06),
-    var(--lg-shadow);
-}
-
-/* Text fields are rectangles too, so they get the same treatment — but only the
-   frosted rung: at ~40px tall a refraction bezel has nothing to bend, and one
-   live filter per field would be all cost and no effect. */
-body:not(:has(.public-page)) input:not([type='file']),
-body:not(:has(.public-page)) textarea,
-body:not(:has(.public-page)) select {
-  background-color: var(--lg-tint-solid);
-  box-shadow: inset 0 1px 0 var(--lg-rim-soft);
-}
-
-@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  body:not(:has(.public-page)) input:not([type='file']),
-  body:not(:has(.public-page)) textarea,
-  body:not(:has(.public-page)) select {
-    background-color: var(--lg-tint);
-    -webkit-backdrop-filter: blur(10px) saturate(160%);
-    backdrop-filter: blur(10px) saturate(160%);
-  }
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  body:not(:has(.public-page)) input:not([type='file']),
-  body:not(:has(.public-page)) textarea,
-  body:not(:has(.public-page)) select {
-    background-color: var(--lg-tint-solid);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
-@media (prefers-contrast: more) {
-  .lg-glass {
-    background-color: #0a1626;
-  }
-}
-
-/* Respect prefers-reduced-motion in the flipbook animation */
-@media (prefers-reduced-motion: reduce) {
-  body {
-    animation: none;
-  }
-
-  .stf__parent {
-    transition: none !important;
-  }
-
-  body:has(.public-page) .reveal,
-  body:has(.public-page) .public-page .public-card,
-  body:has(.public-page) .public-page .public-card:hover,
-  body:has(.public-page) .public-page .public-card img,
-  body:has(.public-page) .public-page .public-card:hover img {
-    transition: none;
-    transform: none;
-  }
-}
-
-/* Keep page-turn shadows beneath the moving sheet and above the static pages. */
-#fb-wrap .stf__outerShadow,
-#fb-wrap .stf__innerShadow,
-#fb-wrap .stf__hardShadow,
-#fb-wrap .stf__hardInnerShadow {
-  z-index: 6 !important;
-}
-
-/* ---------- Accessibility: visible keyboard focus and skip link ---------- */
-:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-
-/* Only visible while focused: a keyboard user can jump the header and nav. */
-.skip-link {
-  position: fixed;
-  top: 0.75rem;
-  left: 0.75rem;
-  z-index: 100;
-  padding: 0.65rem 1rem;
-  border-radius: 999px;
-  background: #00713f;
-  color: #ffffff;
-  font-weight: 600;
-  transform: translateY(-200%);
-  transition: transform 160ms ease;
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-  outline: 2px solid #ffffff;
-  outline-offset: 2px;
 }

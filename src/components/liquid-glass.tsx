@@ -1,14 +1,37 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { HOST_ID, acquireLens, releaseLens, supportsRefraction } from '@/lib/liquid-glass';
 
 /**
- * Hidden host for the generated refraction filters. Mounted once in the root
- * layout; it must not be `display: none`, because a hidden subtree is not a
- * reliable filter source in every engine.
+ * Hidden host for the generated refraction filters.
+ *
+ * It is only mounted when the page actually contains a glass surface: the
+ * empty SVG used to travel to every visitor even though nothing used it.
  */
 export function LiquidGlassDefs() {
+  const [needed, setNeeded] = useState(false);
+
+  useEffect(() => {
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      if (document.querySelector('.lg-glass, [data-lg-surface]')) setNeeded(true);
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(check);
+    };
+    check();
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
+  if (!needed) return null;
+
   return (
     <svg
       id={HOST_ID}

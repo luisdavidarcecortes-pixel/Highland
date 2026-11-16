@@ -8,3 +8,4 @@ out
 .DS_Store
 server.log
 *.log
+.cache/reader/

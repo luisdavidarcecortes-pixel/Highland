@@ -16,7 +16,11 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <div className="public-page mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-4 py-20 text-center">
+    <div
+      role="alert"
+      aria-live="assertive"
+      className="public-page mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-4 py-20 text-center"
+    >
       <p className="editorial-kicker">Something went wrong</p>
       <h1 className="masthead mt-3 text-4xl font-bold md:text-5xl">This page could not be loaded.</h1>
       <p className="mt-4 max-w-md text-ink/70">

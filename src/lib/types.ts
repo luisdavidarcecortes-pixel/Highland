@@ -11,6 +11,8 @@ export interface Edition {
   pdf_url: string;
   published: boolean;
   created_at: string;
+  /** Member who uploaded the issue: only they (or an admin) may edit or publish it. */
+  created_by?: string | null;
 }
 
 export interface Article {
@@ -41,4 +43,8 @@ export interface ProfileLite {
   full_name: string | null;
   email: string;
   role: Role;
+  active?: boolean;
+  invited_at?: string | null;
+  confirmed_at?: string | null;
+  last_sign_in_at?: string | null;
 }

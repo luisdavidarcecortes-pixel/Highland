@@ -2,6 +2,13 @@
 export function siteUrl(): string {
   const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (configured) return configured.replace(/\/+$/, '');
+  if (process.env.NODE_ENV === 'production') {
+    // Canonical links, the sitemap and the invitation links would all point at
+    // localhost: it is better to stop the deployment than to publish them.
+    throw new Error(
+      'NEXT_PUBLIC_SITE_URL is required in production (the public origin of the site, e.g. https://thehighlander.org).',
+    );
+  }
   return 'http://localhost:3000';
 }
 

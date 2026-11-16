@@ -10,6 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { auditSupabase } from './supabase-audit.mjs';
 
 const envPath = resolve(process.cwd(), '.env.local');
 
@@ -146,7 +147,8 @@ if (serviceKey) {
 if (serviceKey) {
   try {
     const result = await api('/storage/v1/bucket/newspaper', serviceKey);
-    if (result.response.ok) ok('Bucket "newspaper"', 'existe');
+    if (result.response.ok && result.json?.public === false) ok('Bucket "newspaper"', 'privado');
+    else if (result.response.ok) fail('Bucket "newspaper"', 'es público; ejecuta supabase/harden-newspaper.sql para proteger los borradores.');
     else if (result.response.status === 404 || result.response.status === 400) {
       fail('Bucket "newspaper"', 'no existe; vuelve a ejecutar supabase/schema.sql.');
     } else fail('Bucket "newspaper"', describe(result));
@@ -162,6 +164,15 @@ if (serviceKey) {
   } catch (error) {
     fail('API de administración', errorDetail(error));
   }
+
+  // 7) The migrations: global reader queue, global AI quota, ownership rules
+  //    and the privacy of the drafts. All of them are read-only.
+  try {
+    const audit = await auditSupabase({ url, anonKey, serviceKey });
+    for (const item of audit) record(item.status, item.name, item.detail);
+  } catch (error) {
+    warn('Migraciones de Supabase', errorDetail(error));
+  }
 }
 
 for (const check of checks) {
@@ -170,11 +181,17 @@ for (const check of checks) {
 }
 
 const failures = checks.filter((check) => check.status === 'fail');
+const warnings = checks.filter((check) => check.status === 'warn');
 console.log('');
 if (failures.length > 0) {
   console.log(`Quedan ${failures.length} problema(s). Revisa supabase/SETUP.md y vuelve a intentarlo.`);
   process.exit(1);
 }
 console.log('Supabase está listo: la web ya no arrancará en modo demo.');
-console.log('Siguiente paso: crea el primer admin (Authentication → Users) y ejecuta:');
-console.log("  update public.profiles set role = 'admin' where email = 'tu-correo';");
+if (warnings.length > 0) {
+  console.log(`${warnings.length} aviso(s) sin comprobar:`);
+  for (const warning of warnings) console.log(`  - ${warning.name}: ${warning.detail}`);
+}
+console.log('Puedes repetir esta comprobación cuando quieras: npm run supabase:check');
+console.log('Si aún no hay ningún administrador, créalo en Authentication → Users y ejecuta:');
+console.log("  insert into public.profiles (id,email,role) select id,email,'admin' from auth.users where email='tu-correo' on conflict (id) do update set role='admin';");

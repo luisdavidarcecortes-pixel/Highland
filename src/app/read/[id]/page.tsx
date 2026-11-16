@@ -1,21 +1,22 @@
-import Link from 'next/link';
+import { Link } from '@/components/page-transitions';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
 import { getEditionById } from '@/lib/data-editions';
 import { isDemoMode } from '@/lib/demo';
-import { Flipbook } from '@/components/flipbook/flipbook';
+import { Flipbook } from '@/components/flipbook/reader';
 import { formatMonthEs, issueLabel } from '@/lib/utils';
 import { absoluteUrl } from '@/lib/site';
 
 export const dynamic = 'force-dynamic';
 
 interface Props {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const edition = await getEditionById(params.id);
+  const routeParams = await params;
+  const edition = await getEditionById(routeParams.id);
   if (!edition || !edition.published) {
     return { title: 'Issue not found', robots: { index: false, follow: false } };
   }
@@ -46,7 +47,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ReadEditionPage({ params }: Props) {
-  const edition = await getEditionById(params.id);
+  const routeParams = await params;
+  const edition = await getEditionById(routeParams.id);
   const demo = isDemoMode();
 
   if (!edition || (!edition.published && !demo)) notFound();
@@ -55,7 +57,7 @@ export default async function ReadEditionPage({ params }: Props) {
   return (
     <div className="public-page relative mx-auto max-w-6xl px-4 py-8">
       <div
-        className="mb-5 flex items-center justify-between gap-4 border-b border-ink/15 pb-5"
+        className="mb-5 flex items-center justify-between gap-4 pb-5"
       >
         <div>
           <Link href="/archive" className="inline-flex items-center gap-1 text-sm font-semibold text-ink/60 hover:text-ink">

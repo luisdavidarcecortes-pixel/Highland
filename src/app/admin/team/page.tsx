@@ -1,5 +1,6 @@
+import { redirect } from 'next/navigation';
 import { getTeam } from '@/lib/data-team';
-import { getSessionUser } from '@/lib/auth';
+import { pageSession } from '@/lib/page-session';
 import { isDemoMode } from '@/lib/demo';
 import { TeamManager } from './team-manager';
 
@@ -7,8 +8,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function AdminTeamPage() {
   const demo = isDemoMode();
-  const user = demo ? null : await getSessionUser();
-  const team = demo ? await getTeam() : user?.role === 'admin' ? await getTeam() : null;
+  const user = demo ? null : await pageSession();
+  if (!demo && !user) redirect('/admin/login');
+
+  const team = demo || user?.role === 'admin' ? await getTeam() : null;
 
   if (!team) {
     return (
@@ -18,5 +21,5 @@ export default async function AdminTeamPage() {
     );
   }
 
-  return <TeamManager team={team} demo={demo} currentUserId={user?.id ?? null} />;
+  return <TeamManager team={team} demo={demo} currentUserId={user?.id ?? null} verified={user?.aal === 'aal2'} />;
 }

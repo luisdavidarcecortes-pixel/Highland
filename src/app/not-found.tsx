@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from '@/components/page-transitions';
 import { ArrowLeft, BookOpen } from 'lucide-react';
 
 export default function NotFound() {

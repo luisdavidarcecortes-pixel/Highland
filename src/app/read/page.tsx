@@ -1,8 +1,8 @@
-import Link from 'next/link';
+import { Link } from '@/components/page-transitions';
 import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
 import { getPublishedEditions } from '@/lib/data-editions';
-import { Flipbook } from '@/components/flipbook/flipbook';
+import { Flipbook } from '@/components/flipbook/reader';
 import { formatMonthEs, issueLabel } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
   title: 'Read the latest issue',
   description: 'Open the latest issue of The Highlander in the page-by-page reader.',
   alternates: { canonical: '/read' },
+  openGraph: { url: '/read' },
 };
 
 export default async function ReadIndexPage() {
@@ -32,7 +33,7 @@ export default async function ReadIndexPage() {
 
   return (
     <div className="public-page relative mx-auto max-w-6xl px-4 py-8">
-      <div className="mb-5 flex items-center justify-between gap-4 border-b border-ink/15 pb-5">
+      <div className="mb-5 flex items-center justify-between gap-4 pb-5">
         <div>
           <Link href="/archive" className="inline-flex items-center gap-1 text-sm font-semibold text-ink/60 hover:text-ink">
             <ArrowLeft size={14} /> Archive

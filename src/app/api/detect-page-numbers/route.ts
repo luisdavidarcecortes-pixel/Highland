@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { isDemoMode } from '@/lib/demo';
-import { clientKey, rateLimit } from '@/lib/rate-limit';
+import { requireAiAccess } from '@/lib/ai-access';
 import { generateGeminiJson, GeminiError } from '@/lib/gemini';
 
 export const runtime = 'nodejs';
@@ -82,20 +82,8 @@ function parsePageNumbers(
 }
 
 export async function POST(req: NextRequest) {
-  if (!isDemoMode()) {
-    const user = await getSessionUser();
-    if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-  }
-
-  // Each call sends up to six page images to Gemini: without a cap this is the
-  // most expensive endpoint to abuse.
-  const limit = rateLimit(`detect:${clientKey(req)}`, 60, 10 * 60 * 1000);
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: 'Too many page-number checks from this connection. Try again in a few minutes.' },
-      { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } },
-    );
-  }
+  const denied = await requireAiAccess('detect');
+  if (denied) return denied;
 
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -147,7 +135,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ pages: pageNumbers });
   } catch (error) {
     if (error instanceof GeminiError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      // The provider message stays in the server log.
+      console.error('[detect-page-numbers] Gemini error', error.status, error.message);
+      return NextResponse.json(
+        { error: 'The scanned page numbers could not be read with AI right now. You can order them by hand.' },
+        { status: error.status >= 500 ? 502 : error.status },
+      );
     }
     return NextResponse.json(
       { error: 'Could not reach Gemini to read scanned page numbers.' },

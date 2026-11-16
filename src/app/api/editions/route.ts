@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, getSupabaseServerClient } from '@/lib/supabase-server';
-import { getSessionUser } from '@/lib/auth';
+import { getSupabaseServerClient } from '@/lib/supabase-server';
+import { apiSession } from '@/lib/api-session';
+import { isOwnedUpload, mediaUrl } from '@/lib/media';
+import { cleanupObjects } from '@/lib/storage-cleanup';
+import { serverError } from '@/lib/api-error';
 
 export const runtime = 'nodejs';
 
@@ -13,15 +16,13 @@ const BUCKET = 'newspaper';
  * working fine in dev. These handlers only accept the resulting paths and
  * record the row.
  */
-const PDF_PATH_RE = /^editions\/(\d+)-[a-z0-9-]{1,80}\.pdf$/;
-const COVER_PATH_RE = /^covers\/(\d+)-[a-z0-9-]{1,80}\.jpg$/;
+const PDF_PATH_RE = /^editions\/[a-f0-9-]+\/(\d+)-[a-z0-9-]{1,120}\.pdf$/;
+const COVER_PATH_RE = /^covers\/[a-f0-9-]+\/(\d+)-[a-z0-9-]{1,120}\.jpg$/;
 /**
- * Paths are client-chosen, so the timestamp is checked against the clock:
- * without it a signed-in editor could point a new row at another issue's PDF
- * and then, through a failing insert, have the server delete that issue's
- * files. A fresh stamp means "this upload, made right now".
+ * Allow the same 24-hour window as resumable Storage uploads. The RPC verifies the actual
+ * Storage owner before the API may attach or clean up the uploaded files.
  */
-const PATH_MAX_AGE_MS = 10 * 60 * 1000;
+const PATH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const PATH_MAX_SKEW_MS = 60 * 1000;
 
 function validPath(path: string, pattern: RegExp): boolean {
@@ -32,15 +33,17 @@ function validPath(path: string, pattern: RegExp): boolean {
   return age >= -PATH_MAX_SKEW_MS && age <= PATH_MAX_AGE_MS;
 }
 
+function validDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function hasJsonContentType(req: NextRequest): boolean {
   return req.headers.get('content-type')?.toLowerCase().includes('application/json') ?? false;
 }
 
-async function requireUser() {
-  const user = await getSessionUser();
-  if (!user) return { error: NextResponse.json({ error: 'Not authenticated' }, { status: 401 }) };
-  return { user };
-}
+const requireUser = apiSession;
 
 /**
  * Every path must exist in Storage before the row points at it, so a half
@@ -48,7 +51,7 @@ async function requireUser() {
  * Returns the first missing path, or null when all of them are real.
  */
 async function firstMissingObject(
-  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseServerClient>>>,
   paths: string[],
 ): Promise<string | null> {
   for (const path of paths) {
@@ -60,26 +63,36 @@ async function firstMissingObject(
 
 /** Removes objects best-effort; cleanup must not replace the real error. */
 async function removeObjects(
-  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseServerClient>>>,
   paths: string[],
 ): Promise<void> {
   if (paths.length === 0) return;
-  // Object cleanup is a server decision (the route already authorized the
-  // caller), so it uses the service role when configured: an editor replacing
-  // a PDF must not need blanket delete rights on the bucket.
-  const admin = getSupabaseAdminClient();
-  if (admin) {
-    await admin.storage.from(BUCKET).remove(paths);
-    return;
+  // The shared cleanup verifies that no content still references the object.
+  await cleanupObjects(paths);
+}
+
+async function ownsUploads(supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseServerClient>>>, paths: string[], userId: string) {
+  if (!isOwnedUpload(paths[0], userId, 'editions') || !isOwnedUpload(paths[1], userId, 'covers')) return false;
+  const { data, error } = await supabase.rpc('owns_newspaper_uploads', { object_paths: paths });
+  return !error && data === true;
+}
+
+/** A retry after a lost response must return the original draft, not duplicate it. */
+async function savedAttempt(supabase: NonNullable<Awaited<ReturnType<typeof getSupabaseServerClient>>>, id: string, userId: string, pdfPath: string, coverPath: string) {
+  const { data, error } = await supabase.from('editions').select('*').eq('id', id).maybeSingle();
+  if (error) return NextResponse.json({ error: 'Could not verify the previous save. Please retry.' }, { status: 503 });
+  if (!data) return null;
+  if (data.created_by !== userId || data.pdf_path !== pdfPath || data.cover_path !== coverPath) {
+    return NextResponse.json({ error: 'This save identifier belongs to a different upload.' }, { status: 409 });
   }
-  await supabase.storage.from(BUCKET).remove(paths);
+  return NextResponse.json({ edition: data }, { status: 200 });
 }
 
 export async function POST(req: NextRequest) {
   const { user, error } = await requireUser();
   if (error || !user) return error!;
 
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   if (!hasJsonContentType(req)) {
     return NextResponse.json(
@@ -89,6 +102,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as {
+    id?: unknown;
     title?: unknown;
     number?: unknown;
     edition_date?: unknown;
@@ -97,11 +111,15 @@ export async function POST(req: NextRequest) {
     pdf_path?: unknown;
     cover_path?: unknown;
   } | null;
-  if (!body || typeof body !== 'object') {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ error: 'Invalid JSON payload.' }, { status: 400 });
   }
 
   const title = String(body.title ?? '').trim();
+  const id = body.id == null ? '' : String(body.id);
+  if (id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    return NextResponse.json({ error: 'Invalid save identifier.' }, { status: 400 });
+  }
   const number = Number(body.number ?? 0);
   const editionDate = String(body.edition_date ?? '');
   const schoolYear = String(body.school_year ?? '');
@@ -109,10 +127,10 @@ export async function POST(req: NextRequest) {
   const pdfPath = String(body.pdf_path ?? '');
   const coverPath = String(body.cover_path ?? '');
 
-  if (!title || !editionDate) {
+  if (!title || !editionDate || !schoolYear || !Number.isSafeInteger(number) || number < 0) {
     return NextResponse.json({ error: 'A title and a date are required.' }, { status: 400 });
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(editionDate) || Number.isNaN(Date.parse(`${editionDate}T00:00:00Z`))) {
+  if (!validDate(editionDate)) {
     return NextResponse.json({ error: 'Invalid edition date.' }, { status: 400 });
   }
   if (!validPath(pdfPath, PDF_PATH_RE) || !validPath(coverPath, COVER_PATH_RE)) {
@@ -122,6 +140,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  if (id) {
+    const previous = await savedAttempt(supabase, id, user.id, pdfPath, coverPath);
+    if (previous) return previous;
+  }
+
+  if (!(await ownsUploads(supabase, [pdfPath, coverPath], user.id))) {
+    return NextResponse.json({ error: 'The files must belong to your account. Re-upload them or apply the database migration.' }, { status: 403 });
+  }
   const missing = await firstMissingObject(supabase, [pdfPath, coverPath]);
   if (missing) {
     return NextResponse.json(
@@ -130,12 +156,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const pdfUrl = supabase.storage.from(BUCKET).getPublicUrl(pdfPath).data.publicUrl;
-  const coverUrl = supabase.storage.from(BUCKET).getPublicUrl(coverPath).data.publicUrl;
+  const pdfUrl = mediaUrl(pdfPath);
+  const coverUrl = mediaUrl(coverPath);
 
   const { data, error: dbErr } = await supabase
     .from('editions')
     .insert({
+      ...(id ? { id } : {}),
       number: number || null,
       title,
       description: description || null,
@@ -152,8 +179,12 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (dbErr) {
-    await removeObjects(supabase, [pdfPath, coverPath]);
-    return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    if (id && dbErr.code === '23505') {
+      const previous = await savedAttempt(supabase, id, user.id, pdfPath, coverPath);
+      if (previous) return previous;
+    }
+    // Retain the completed files so the client can retry this same save.
+    return serverError('editions', dbErr);
   }
   return NextResponse.json({ edition: data }, { status: 201 });
 }
@@ -162,7 +193,7 @@ export async function PATCH(req: NextRequest) {
   const { user, error } = await requireUser();
   if (error || !user) return error!;
 
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   if (!hasJsonContentType(req)) {
     return NextResponse.json(
@@ -190,12 +221,23 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.published === 'boolean') {
     const id = String(body.id ?? '');
     if (!id) return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
+    const { data: target, error: findErr } = await supabase
+      .from('editions')
+      .select('id,created_by')
+      .eq('id', id)
+      .maybeSingle();
+    if (findErr) return serverError('editions', findErr);
+    if (!target) return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
+    // Only the member who uploaded the issue, or an administrator, may publish it.
+    if (user.role !== 'admin' && target.created_by !== user.id) {
+      return NextResponse.json({ error: 'Only the uploader or an admin can publish this issue.' }, { status: 403 });
+    }
     const { data, error: dbErr } = await supabase
       .from('editions')
       .update({ published: body.published })
       .eq('id', id)
       .select('id');
-    if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+    if (dbErr) return serverError('editions', dbErr);
     if (!data || data.length === 0) {
       return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
     }
@@ -223,19 +265,23 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid issue data.' }, { status: 400 });
   }
   if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(editionDate) ||
-    Number.isNaN(Date.parse(`${editionDate}T00:00:00Z`))
+    !validDate(editionDate)
   ) {
     return NextResponse.json({ error: 'Invalid edition date.' }, { status: 400 });
   }
 
   const { data: existing, error: findErr } = await supabase
     .from('editions')
-    .select('pdf_path, cover_path')
+    .select('pdf_path, cover_path, created_by')
     .eq('id', id)
     .maybeSingle();
-  if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
+  if (findErr) return serverError('editions', findErr);
   if (!existing) return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
+  // The same ownership rule applies to every other change of an issue: only the
+  // member who uploaded it, or an administrator, may edit its content.
+  if (user.role !== 'admin' && existing.created_by !== user.id) {
+    return NextResponse.json({ error: 'Only the uploader or an admin can edit this issue.' }, { status: 403 });
+  }
 
   if (replaceFiles) {
     // Replacing the PDF always brings its cover: the two are generated together
@@ -245,6 +291,9 @@ export async function PATCH(req: NextRequest) {
         { error: 'The replacement PDF and its cover must both be uploaded.' },
         { status: 400 },
       );
+    }
+    if (!(await ownsUploads(supabase, [pdfPath, coverPath], user.id))) {
+      return NextResponse.json({ error: 'The replacement files must belong to your account.' }, { status: 403 });
     }
     const missing = await firstMissingObject(supabase, [pdfPath, coverPath]);
     if (missing) {
@@ -264,9 +313,9 @@ export async function PATCH(req: NextRequest) {
   };
   if (replaceFiles) {
     updates.pdf_path = pdfPath;
-    updates.pdf_url = supabase.storage.from(BUCKET).getPublicUrl(pdfPath).data.publicUrl;
+    updates.pdf_url = mediaUrl(pdfPath);
     updates.cover_path = coverPath;
-    updates.cover_url = supabase.storage.from(BUCKET).getPublicUrl(coverPath).data.publicUrl;
+    updates.cover_url = mediaUrl(coverPath);
   }
 
   const { data: updated, error: updateErr } = await supabase
@@ -275,25 +324,21 @@ export async function PATCH(req: NextRequest) {
     .eq('id', id)
     .select('id');
   if (updateErr) {
-    // The freshly uploaded objects are ours (fresh stamp), so dropping them
-    // keeps the 1 GB free quota clean when the row could not be saved.
-    if (replaceFiles) await removeObjects(supabase, [pdfPath, coverPath]);
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
   }
   if (!updated || updated.length === 0) {
-    if (replaceFiles) await removeObjects(supabase, [pdfPath, coverPath]);
     return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
   }
 
   const oldPaths = replaceFiles
-    ? [existing.pdf_path, existing.cover_path].filter((path): path is string => Boolean(path))
+    ? [existing.pdf_path, existing.cover_path].filter((path): path is string => Boolean(path) && path !== pdfPath && path !== coverPath)
     : [];
   if (oldPaths.length) {
-    const { error: cleanupErr } = await supabase.storage.from(BUCKET).remove(oldPaths);
+    const cleanupErr = await cleanupObjects(oldPaths);
     if (cleanupErr) {
       return NextResponse.json({
         ok: true,
-        warning: `Issue saved, but an old file could not be removed: ${cleanupErr.message}`,
+        warning: cleanupErr,
       });
     }
   }
@@ -307,8 +352,16 @@ export async function DELETE(req: NextRequest) {
   if (user.role !== 'admin') {
     return NextResponse.json({ error: 'Only an admin can delete issues' }, { status: 403 });
   }
+  // Deleting an issue also removes its PDF: it must not be possible with a
+  // stolen password alone.
+  if (user.aal !== 'aal2') {
+    return NextResponse.json(
+      { error: 'Deleting an issue requires two-factor verification. Enable it in your account settings.' },
+      { status: 403 },
+    );
+  }
 
-  const supabase = getSupabaseServerClient();
+  const supabase = await getSupabaseServerClient();
   if (!supabase) return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
 
   const id = new URL(req.url).searchParams.get('id');
@@ -322,7 +375,7 @@ export async function DELETE(req: NextRequest) {
     .delete()
     .eq('id', id)
     .select('pdf_path, cover_path');
-  if (dbErr) return NextResponse.json({ error: dbErr.message }, { status: 500 });
+  if (dbErr) return serverError('editions', dbErr);
   if (!deleted || deleted.length === 0) {
     return NextResponse.json({ error: 'Issue not found.' }, { status: 404 });
   }
