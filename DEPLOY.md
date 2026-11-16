@@ -31,7 +31,11 @@ git push origin release-v1
 2. Elige **Import** el repositorio `luisdavidarcecortes-pixel/Highlander`.
 3. Vercel detecta Next.js solo: no hay que cambiar nada del *Framework
    Preset* ni del *Build Command*.
-4. Pulsa **Deploy**.
+4. **Antes de desplegar**, abre **Settings → Git → Production Branch** y elige
+   `release-v1`. Vercel usa `main` por defecto, y `main` todavía tiene la
+   versión de octubre. (Cuando todo esté probado, puedes fusionar `release-v1`
+   en `main` y volver a poner `main` como rama de producción.)
+5. Añade las variables de entorno del apartado siguiente y pulsa **Deploy**.
 
 ## 4. Variables de entorno
 
